@@ -1,3 +1,4 @@
+Copyright (c) 2025 Per Buer (per.buer@gmail.com)
 Copyright (c) 2016 Colin Marc (colinmarc@gmail.com)
 
 MIT License

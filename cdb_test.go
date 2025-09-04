@@ -119,3 +119,103 @@ func shuffle(a [][][]byte) {
 		a[i], a[j] = a[j], a[i]
 	}
 }
+
+func TestCDB64WithPythonFile(t *testing.T) {
+	// Test reading a 64-bit CDB file created by python-pure-cdb
+	db, err := cdb.Open64("test_64bit.cdb")
+	if err != nil {
+		t.Skip("Skipping CDB64 test - test_64bit.cdb not found:", err)
+		return
+	}
+	defer db.Close()
+
+	// Test known key-value pairs from our Python test script
+	testCases := map[string]string{
+		"Alice":   "Practice",
+		"Bob":     "Hope",
+		"Charlie": "Horse",
+		"foo":     "bar",
+		"baz":     "quuuux",
+	}
+
+	for key, expectedValue := range testCases {
+		value, err := db.Get([]byte(key))
+		require.NoError(t, err, "Key: %s", key)
+		assert.Equal(t, []byte(expectedValue), value, "Key: %s", key)
+	}
+
+	// Test non-existent key
+	value, err := db.Get([]byte("nonexistent"))
+	require.NoError(t, err)
+	assert.Nil(t, value)
+
+	// Test iteration
+	iter := db.Iter()
+	foundKeys := make(map[string]string)
+
+	for iter.Next() {
+		foundKeys[string(iter.Key())] = string(iter.Value())
+	}
+
+	require.NoError(t, iter.Err())
+	assert.Equal(t, len(testCases), len(foundKeys), "Expected %d keys, found %d", len(testCases), len(foundKeys))
+
+	for key, expectedValue := range testCases {
+		assert.Equal(t, expectedValue, foundKeys[key], "Key: %s", key)
+	}
+}
+
+func TestWriter64(t *testing.T) {
+	// Test writing and reading a 64-bit CDB file with Go implementation
+	writer, err := cdb.Create64("test_go_64bit.cdb")
+	require.NoError(t, err)
+	defer os.Remove("test_go_64bit.cdb")
+
+	// Write test data
+	testData := map[string]string{
+		"Alice":   "Practice",
+		"Bob":     "Hope",
+		"Charlie": "Horse",
+		"foo":     "bar",
+		"baz":     "quuuux",
+		"empty":   "",
+		"":        "empty_key",
+	}
+
+	for key, value := range testData {
+		err := writer.Put([]byte(key), []byte(value))
+		require.NoError(t, err, "Failed to put key: %s", key)
+	}
+
+	// Freeze and get reader
+	db, err := writer.Freeze()
+	require.NoError(t, err)
+	defer db.Close()
+
+	// Read back and verify
+	for key, expectedValue := range testData {
+		value, err := db.Get([]byte(key))
+		require.NoError(t, err, "Failed to get key: %s", key)
+		assert.Equal(t, []byte(expectedValue), value, "Key: %s", key)
+	}
+
+	// Test non-existent key
+	value, err := db.Get([]byte("nonexistent"))
+	require.NoError(t, err)
+	assert.Nil(t, value)
+
+	// Test iteration
+	iter := db.Iter()
+	foundKeys := make(map[string]string)
+
+	for iter.Next() {
+		foundKeys[string(iter.Key())] = string(iter.Value())
+	}
+
+	require.NoError(t, iter.Err())
+	assert.Equal(t, len(testData), len(foundKeys))
+
+	for key, expectedValue := range testData {
+		assert.Equal(t, expectedValue, foundKeys[key], "Key: %s", key)
+	}
+}
