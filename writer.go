@@ -73,6 +73,24 @@ func NewWriter(writer io.WriteSeeker) (*Writer, error) {
 // Put adds a key/value pair to the database. If the amount of data written
 // would exceed the limit, Put returns ErrTooMuchData.
 func (cdb *Writer) Put(key, value []byte) error {
+	/* The + 32 is a safety buffer to prevent edge cases where the calculation might be slightly off.
+	Let me break down the magic numbers:
+
+	The calculation components:
+	- cdb.bufferedOffset: Current position in the file (data written so far)
+	- entrySize: Size of this record (16 bytes header + key + value)
+	- cdb.estimatedFooterSize: Estimated size of hash tables that will be written at the end
+	- + 32: Safety buffer
+
+	The + 32 breakdown:
+	- Hash table entries are 16 bytes each (hash + offset)
+	- In the worst case, adding this entry might trigger hash table reallocation
+	- Hash table sizes double when they get full (power of 2 sizing)
+	- The 32 provides buffer for:
+	  - Potential rounding errors in estimatedFooterSize
+	  - Additional hash table entries from collision handling
+	  - General safety margin to ensure we don't hit the exact limit
+	*/
 	entrySize := int64(16 + len(key) + len(value))
 	const maxInt64 = int64(^uint64(0) >> 1)
 	if (cdb.bufferedOffset + entrySize + cdb.estimatedFooterSize + 32) > maxInt64 {

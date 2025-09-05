@@ -1,6 +1,7 @@
 package cdb
 
 import (
+	"bytes"
 	"encoding/binary"
 	"iter"
 	"os"
@@ -10,13 +11,16 @@ import (
 )
 
 // MmapCDB represents a memory-mapped 64-bit CDB database.
+// The returned key and value slices from its methods point directly to the
+// memory-mapped file data and are valid only until the database is closed.
+// Do not modify the contents of the returned slices.
 type MmapCDB struct {
 	data  []byte
 	index index
 	file  *os.File
 }
 
-// OpenMmap opens a 64-bit CDB file using memory mapping.
+// OpenMmap opens a 64-bit CDB file at the given path using memory mapping for reads.
 func OpenMmap(path string) (*MmapCDB, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -153,7 +157,7 @@ func (cdb *MmapCDB) getValueAtMmap(offset uint64, expectedKey []byte) []byte {
 	key := cdb.data[dataStart:keyEnd]
 
 	// If the keys don't match, this isn't it.
-	if !equalBytes(key, expectedKey) {
+	if !bytes.Equal(key, expectedKey) {
 		return nil
 	}
 
@@ -168,20 +172,6 @@ func readTupleMmap(data []byte, offset uint64) (uint64, uint64) {
 	first := binary.LittleEndian.Uint64(data[offset : offset+8])
 	second := binary.LittleEndian.Uint64(data[offset+8 : offset+16])
 	return first, second
-}
-
-// equalBytes compares two byte slices for equality.
-// This is equivalent to bytes.Equal but avoids the import.
-func equalBytes(a, b []byte) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i, v := range a {
-		if v != b[i] {
-			return false
-		}
-	}
-	return true
 }
 
 // Size returns the size of the memory-mapped data.

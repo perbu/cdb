@@ -41,17 +41,26 @@ func TestGet(t *testing.T) {
 	db, err := cdb.OpenMmap(testFile)
 	requireNoError(t, err)
 	requireNotNil(t, db)
+	defer db.Close()
+	// The last record is the test for a key that doesn't exist.
+	missRecord := expectedRecords[len(expectedRecords)-1]
+	records := expectedRecords[:len(expectedRecords)-1]
 
-	records := append(append(expectedRecords, expectedRecords...), expectedRecords...)
+	// Duplicate and shuffle the records that should exist
+	records = append(append(records, records...), records...)
 	shuffle(records)
 
 	for _, record := range records {
 		msg := "while fetching " + string(record[0])
-
 		value, err := db.Get(record[0])
 		requireNoError(t, err, msg)
 		assertEqual(t, string(record[1]), string(value), msg)
 	}
+
+	// Separately test the key that should not be found
+	value, err := db.Get(missRecord[0])
+	requireNoError(t, err, "for missing key")
+	requireNil(t, value, "for missing key")
 }
 
 func TestClosesFile(t *testing.T) {
