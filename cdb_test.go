@@ -25,7 +25,7 @@ var expectedRecords = [][][]byte{
 }
 
 func TestGet(t *testing.T) {
-	db, err := cdb.Open("./test/test.cdb")
+	db, err := cdb.OpenMmap("./test/test.cdb")
 	requireNoError(t, err)
 	requireNotNil(t, db)
 
@@ -45,7 +45,7 @@ func TestClosesFile(t *testing.T) {
 	f, err := os.Open("./test/test.cdb")
 	requireNoError(t, err)
 
-	db, err := cdb.New(f, nil)
+	db, err := cdb.NewMmap(f, nil)
 	requireNoError(t, err)
 	requireNotNil(t, db)
 
@@ -57,7 +57,7 @@ func TestClosesFile(t *testing.T) {
 }
 
 func BenchmarkGet(b *testing.B) {
-	db, _ := cdb.Open("./test/test.cdb")
+	db, _ := cdb.OpenMmap("./test/test.cdb")
 	b.ResetTimer()
 
 	rand.Seed(time.Now().UnixNano())
@@ -94,8 +94,8 @@ func Example() {
 	// Output: Practice
 }
 
-func ExampleCDB() {
-	db, err := cdb.Open("./test/test.cdb")
+func ExampleMmapCDB() {
+	db, err := cdb.OpenMmap("./test/test.cdb")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -120,7 +120,7 @@ func shuffle(a [][][]byte) {
 
 func TestCDB64WithPythonFile(t *testing.T) {
 	// Test reading a 64-bit CDB file created by python-pure-cdb
-	db, err := cdb.Open64("test_64bit.cdb")
+	db, err := cdb.OpenMmap("test_64bit.cdb")
 	if err != nil {
 		t.Skip("Skipping CDB64 test - test_64bit.cdb not found:", err)
 		return
@@ -147,25 +147,11 @@ func TestCDB64WithPythonFile(t *testing.T) {
 	requireNoError(t, err)
 	requireNil(t, value)
 
-	// Test iteration
-	iter := db.Iter()
-	foundKeys := make(map[string]string)
-
-	for iter.Next() {
-		foundKeys[string(iter.Key())] = string(iter.Value())
-	}
-
-	requireNoError(t, iter.Err())
-	assertEqual(t, len(testCases), len(foundKeys), "Expected %d keys, found %d", len(testCases), len(foundKeys))
-
-	for key, expectedValue := range testCases {
-		assertEqual(t, expectedValue, foundKeys[key], "Key: %s", key)
-	}
 }
 
 func TestWriter64(t *testing.T) {
 	// Test writing and reading a 64-bit CDB file with Go implementation
-	writer, err := cdb.Create64("test_go_64bit.cdb")
+	writer, err := cdb.Create("test_go_64bit.cdb")
 	requireNoError(t, err)
 	defer os.Remove("test_go_64bit.cdb")
 
@@ -202,18 +188,4 @@ func TestWriter64(t *testing.T) {
 	requireNoError(t, err)
 	requireNil(t, value)
 
-	// Test iteration
-	iter := db.Iter()
-	foundKeys := make(map[string]string)
-
-	for iter.Next() {
-		foundKeys[string(iter.Key())] = string(iter.Value())
-	}
-
-	requireNoError(t, iter.Err())
-	assertEqual(t, len(testData), len(foundKeys))
-
-	for key, expectedValue := range testData {
-		assertEqual(t, expectedValue, foundKeys[key], "Key: %s", key)
-	}
 }

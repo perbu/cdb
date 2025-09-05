@@ -186,7 +186,7 @@ func BenchmarkPut64(b *testing.B) {
 		os.Remove(f.Name())
 	}()
 
-	writer, err := cdb.NewWriter64(f, nil)
+	writer, err := cdb.NewWriter(f, nil)
 	requireNoError(b, err)
 
 	random := rand.New(rand.NewSource(time.Now().UnixNano()))
