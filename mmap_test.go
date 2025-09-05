@@ -1,6 +1,7 @@
 package cdb_test
 
 import (
+	"fmt"
 	"os"
 	"testing"
 
@@ -349,4 +350,136 @@ func TestMmapIteratorEarlyTermination(t *testing.T) {
 	}
 
 	assertEqual(t, 3, count, "Should have stopped after 3 items")
+}
+
+// createLargeCDBFile creates a CDB file with the specified number of entries for benchmarking
+func createLargeCDBFile(filename string, numEntries int) error {
+	f, err := os.Create(filename)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	writer, err := cdb.NewWriter(f)
+	if err != nil {
+		return err
+	}
+
+	// Generate predictable test data
+	for i := 0; i < numEntries; i++ {
+		key := []byte(fmt.Sprintf("key_%08d", i))
+		value := []byte(fmt.Sprintf("value_%08d_data_payload", i))
+		err := writer.Put(key, value)
+		if err != nil {
+			return err
+		}
+	}
+
+	_, err = writer.Freeze()
+	return err
+}
+
+const benchmarkEntries = 100000
+
+func BenchmarkMmapIteratorAll(b *testing.B) {
+	// Create test file
+	filename := "/tmp/benchmark_iterator_all.cdb"
+	err := createLargeCDBFile(filename, benchmarkEntries)
+	if err != nil {
+		b.Fatal(err)
+	}
+	defer os.Remove(filename)
+
+	// Open the database
+	db, err := cdb.OpenMmap(filename)
+	if err != nil {
+		b.Fatal(err)
+	}
+	defer db.Close()
+
+	b.ResetTimer()
+	b.ReportAllocs()
+
+	// Measure the performance of individual iteration steps
+	iterations := 0
+	for i := 0; i < b.N; i++ {
+		// Create iterator once per benchmark iteration
+		for key, value := range db.All() {
+			// Access the key and value to ensure they're actually read
+			_ = key[0]   // Force access to key data
+			_ = value[0] // Force access to value data
+			iterations++
+			if iterations >= b.N {
+				return
+			}
+		}
+	}
+}
+
+func BenchmarkMmapIteratorKeys(b *testing.B) {
+	// Create test file
+	filename := "/tmp/benchmark_iterator_keys.cdb"
+	err := createLargeCDBFile(filename, benchmarkEntries)
+	if err != nil {
+		b.Fatal(err)
+	}
+	defer os.Remove(filename)
+
+	// Open the database
+	db, err := cdb.OpenMmap(filename)
+	if err != nil {
+		b.Fatal(err)
+	}
+	defer db.Close()
+
+	b.ResetTimer()
+	b.ReportAllocs()
+
+	// Measure the performance of individual iteration steps
+	iterations := 0
+	for i := 0; i < b.N; i++ {
+		// Create iterator once per benchmark iteration
+		for key := range db.Keys() {
+			// Access the key to ensure it's actually read
+			_ = key[0] // Force access to key data
+			iterations++
+			if iterations >= b.N {
+				return
+			}
+		}
+	}
+}
+
+func BenchmarkMmapIteratorValues(b *testing.B) {
+	// Create test file
+	filename := "/tmp/benchmark_iterator_values.cdb"
+	err := createLargeCDBFile(filename, benchmarkEntries)
+	if err != nil {
+		b.Fatal(err)
+	}
+	defer os.Remove(filename)
+
+	// Open the database
+	db, err := cdb.OpenMmap(filename)
+	if err != nil {
+		b.Fatal(err)
+	}
+	defer db.Close()
+
+	b.ResetTimer()
+	b.ReportAllocs()
+
+	// Measure the performance of individual iteration steps
+	iterations := 0
+	for i := 0; i < b.N; i++ {
+		// Create iterator once per benchmark iteration
+		for value := range db.Values() {
+			// Access the value to ensure it's actually read
+			_ = value[0] // Force access to value data
+			iterations++
+			if iterations >= b.N {
+				return
+			}
+		}
+	}
 }
