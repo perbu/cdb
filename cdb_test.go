@@ -9,8 +9,6 @@ import (
 	"time"
 
 	"github.com/colinmarc/cdb"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 var expectedRecords = [][][]byte{
@@ -28,8 +26,8 @@ var expectedRecords = [][][]byte{
 
 func TestGet(t *testing.T) {
 	db, err := cdb.Open("./test/test.cdb")
-	require.NoError(t, err)
-	require.NotNil(t, db)
+	requireNoError(t, err)
+	requireNotNil(t, db)
 
 	records := append(append(expectedRecords, expectedRecords...), expectedRecords...)
 	shuffle(records)
@@ -38,24 +36,24 @@ func TestGet(t *testing.T) {
 		msg := "while fetching " + string(record[0])
 
 		value, err := db.Get(record[0])
-		require.NoError(t, err, msg)
-		assert.Equal(t, string(record[1]), string(value), msg)
+		requireNoError(t, err, msg)
+		assertEqual(t, string(record[1]), string(value), msg)
 	}
 }
 
 func TestClosesFile(t *testing.T) {
 	f, err := os.Open("./test/test.cdb")
-	require.NoError(t, err)
+	requireNoError(t, err)
 
 	db, err := cdb.New(f, nil)
-	require.NoError(t, err)
-	require.NotNil(t, db)
+	requireNoError(t, err)
+	requireNotNil(t, db)
 
 	err = db.Close()
-	require.NoError(t, err)
+	requireNoError(t, err)
 
 	err = f.Close()
-	assert.Error(t, err)
+	assertError(t, err)
 }
 
 func BenchmarkGet(b *testing.B) {
@@ -140,14 +138,14 @@ func TestCDB64WithPythonFile(t *testing.T) {
 
 	for key, expectedValue := range testCases {
 		value, err := db.Get([]byte(key))
-		require.NoError(t, err, "Key: %s", key)
-		assert.Equal(t, []byte(expectedValue), value, "Key: %s", key)
+		requireNoError(t, err, "Key: %s", key)
+		assertEqual(t, []byte(expectedValue), value, "Key: %s", key)
 	}
 
 	// Test non-existent key
 	value, err := db.Get([]byte("nonexistent"))
-	require.NoError(t, err)
-	assert.Nil(t, value)
+	requireNoError(t, err)
+	requireNil(t, value)
 
 	// Test iteration
 	iter := db.Iter()
@@ -157,18 +155,18 @@ func TestCDB64WithPythonFile(t *testing.T) {
 		foundKeys[string(iter.Key())] = string(iter.Value())
 	}
 
-	require.NoError(t, iter.Err())
-	assert.Equal(t, len(testCases), len(foundKeys), "Expected %d keys, found %d", len(testCases), len(foundKeys))
+	requireNoError(t, iter.Err())
+	assertEqual(t, len(testCases), len(foundKeys), "Expected %d keys, found %d", len(testCases), len(foundKeys))
 
 	for key, expectedValue := range testCases {
-		assert.Equal(t, expectedValue, foundKeys[key], "Key: %s", key)
+		assertEqual(t, expectedValue, foundKeys[key], "Key: %s", key)
 	}
 }
 
 func TestWriter64(t *testing.T) {
 	// Test writing and reading a 64-bit CDB file with Go implementation
 	writer, err := cdb.Create64("test_go_64bit.cdb")
-	require.NoError(t, err)
+	requireNoError(t, err)
 	defer os.Remove("test_go_64bit.cdb")
 
 	// Write test data
@@ -184,25 +182,25 @@ func TestWriter64(t *testing.T) {
 
 	for key, value := range testData {
 		err := writer.Put([]byte(key), []byte(value))
-		require.NoError(t, err, "Failed to put key: %s", key)
+		requireNoError(t, err, "Failed to put key: %s", key)
 	}
 
 	// Freeze and get reader
 	db, err := writer.Freeze()
-	require.NoError(t, err)
+	requireNoError(t, err)
 	defer db.Close()
 
 	// Read back and verify
 	for key, expectedValue := range testData {
 		value, err := db.Get([]byte(key))
-		require.NoError(t, err, "Failed to get key: %s", key)
-		assert.Equal(t, []byte(expectedValue), value, "Key: %s", key)
+		requireNoError(t, err, "Failed to get key: %s", key)
+		assertEqual(t, []byte(expectedValue), value, "Key: %s", key)
 	}
 
 	// Test non-existent key
 	value, err := db.Get([]byte("nonexistent"))
-	require.NoError(t, err)
-	assert.Nil(t, value)
+	requireNoError(t, err)
+	requireNil(t, value)
 
 	// Test iteration
 	iter := db.Iter()
@@ -212,10 +210,10 @@ func TestWriter64(t *testing.T) {
 		foundKeys[string(iter.Key())] = string(iter.Value())
 	}
 
-	require.NoError(t, iter.Err())
-	assert.Equal(t, len(testData), len(foundKeys))
+	requireNoError(t, iter.Err())
+	assertEqual(t, len(testData), len(foundKeys))
 
 	for key, expectedValue := range testData {
-		assert.Equal(t, expectedValue, foundKeys[key], "Key: %s", key)
+		assertEqual(t, expectedValue, foundKeys[key], "Key: %s", key)
 	}
 }

@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/colinmarc/cdb"
-	"github.com/stretchr/testify/require"
 )
 
 // Benchmark memory-mapped CDB vs regular CDB performance
@@ -71,7 +70,7 @@ func BenchmarkGet_Regular_vs_Mmap(b *testing.B) {
 
 	b.Run("Regular", func(b *testing.B) {
 		db, err := cdb.Open(dbPath)
-		require.NoError(b, err)
+		requireNoError(b, err)
 		defer db.Close()
 
 		rand.Seed(time.Now().UnixNano())
@@ -88,7 +87,7 @@ func BenchmarkGet_Regular_vs_Mmap(b *testing.B) {
 
 	b.Run("Mmap", func(b *testing.B) {
 		db, err := cdb.OpenMmap(dbPath)
-		require.NoError(b, err)
+		requireNoError(b, err)
 		defer db.Close()
 
 		rand.Seed(time.Now().UnixNano())
@@ -110,7 +109,7 @@ func BenchmarkGet64_Regular_vs_Mmap(b *testing.B) {
 
 	b.Run("Regular64", func(b *testing.B) {
 		db, err := cdb.Open64(dbPath)
-		require.NoError(b, err)
+		requireNoError(b, err)
 		defer db.Close()
 
 		rand.Seed(time.Now().UnixNano())
@@ -127,7 +126,7 @@ func BenchmarkGet64_Regular_vs_Mmap(b *testing.B) {
 
 	b.Run("Mmap64", func(b *testing.B) {
 		db, err := cdb.OpenMmap64(dbPath)
-		require.NoError(b, err)
+		requireNoError(b, err)
 		defer db.Close()
 
 		rand.Seed(time.Now().UnixNano())
@@ -151,7 +150,7 @@ func BenchmarkSequentialGet_Regular_vs_Mmap(b *testing.B) {
 
 	b.Run("Regular_Sequential", func(b *testing.B) {
 		db, err := cdb.Open(dbPath)
-		require.NoError(b, err)
+		requireNoError(b, err)
 		defer db.Close()
 
 		b.ResetTimer()
@@ -168,7 +167,7 @@ func BenchmarkSequentialGet_Regular_vs_Mmap(b *testing.B) {
 
 	b.Run("Mmap_Sequential", func(b *testing.B) {
 		db, err := cdb.OpenMmap(dbPath)
-		require.NoError(b, err)
+		requireNoError(b, err)
 		defer db.Close()
 
 		b.ResetTimer()
@@ -196,7 +195,7 @@ func BenchmarkDifferentSizes_Regular_vs_Mmap(b *testing.B) {
 
 			b.Run("Regular", func(b *testing.B) {
 				db, err := cdb.Open(dbPath)
-				require.NoError(b, err)
+				requireNoError(b, err)
 				defer db.Close()
 
 				rand.Seed(time.Now().UnixNano())
@@ -213,7 +212,7 @@ func BenchmarkDifferentSizes_Regular_vs_Mmap(b *testing.B) {
 
 			b.Run("Mmap", func(b *testing.B) {
 				db, err := cdb.OpenMmap(dbPath)
-				require.NoError(b, err)
+				requireNoError(b, err)
 				defer db.Close()
 
 				rand.Seed(time.Now().UnixNano())
@@ -240,11 +239,11 @@ func BenchmarkDifferentValueSizes_Regular_vs_Mmap(b *testing.B) {
 		b.Run("ValueSize_"+strconv.Itoa(valueSize)+"B", func(b *testing.B) {
 			// Create database with specific value size
 			f, err := os.CreateTemp("", "bench-valuesize")
-			require.NoError(b, err)
+			requireNoError(b, err)
 			defer os.Remove(f.Name())
 
 			writer, err := cdb.NewWriter(f, nil)
-			require.NoError(b, err)
+			requireNoError(b, err)
 
 			testData := generateTestData(1000, 20, valueSize)
 			for _, record := range testData {
@@ -252,12 +251,12 @@ func BenchmarkDifferentValueSizes_Regular_vs_Mmap(b *testing.B) {
 			}
 
 			_, err = writer.Freeze()
-			require.NoError(b, err)
+			requireNoError(b, err)
 			f.Close()
 
 			b.Run("Regular", func(b *testing.B) {
 				db, err := cdb.Open(f.Name())
-				require.NoError(b, err)
+				requireNoError(b, err)
 				defer db.Close()
 
 				rand.Seed(time.Now().UnixNano())
@@ -274,7 +273,7 @@ func BenchmarkDifferentValueSizes_Regular_vs_Mmap(b *testing.B) {
 
 			b.Run("Mmap", func(b *testing.B) {
 				db, err := cdb.OpenMmap(f.Name())
-				require.NoError(b, err)
+				requireNoError(b, err)
 				defer db.Close()
 
 				rand.Seed(time.Now().UnixNano())
@@ -302,7 +301,7 @@ func BenchmarkColdCache_Regular_vs_Mmap(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			b.StopTimer()
 			db, err := cdb.Open(dbPath)
-			require.NoError(b, err)
+			requireNoError(b, err)
 
 			record := testData[rand.Intn(len(testData))]
 			b.StartTimer()
@@ -321,7 +320,7 @@ func BenchmarkColdCache_Regular_vs_Mmap(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			b.StopTimer()
 			db, err := cdb.OpenMmap(dbPath)
-			require.NoError(b, err)
+			requireNoError(b, err)
 
 			record := testData[rand.Intn(len(testData))]
 			b.StartTimer()
@@ -342,11 +341,11 @@ func BenchmarkColdCache_Regular_vs_Mmap(b *testing.B) {
 func BenchmarkHashCollisions_Regular_vs_Mmap(b *testing.B) {
 	// Create a database with keys that are likely to cause hash collisions
 	f, err := os.CreateTemp("", "bench-collisions")
-	require.NoError(b, err)
+	requireNoError(b, err)
 	defer os.Remove(f.Name())
 
 	writer, err := cdb.NewWriter(f, nil)
-	require.NoError(b, err)
+	requireNoError(b, err)
 
 	// Use keys with similar patterns to increase collision probability
 	var testData [][][]byte
@@ -358,12 +357,12 @@ func BenchmarkHashCollisions_Regular_vs_Mmap(b *testing.B) {
 	}
 
 	_, err = writer.Freeze()
-	require.NoError(b, err)
+	requireNoError(b, err)
 	f.Close()
 
 	b.Run("Regular_Collisions", func(b *testing.B) {
 		db, err := cdb.Open(f.Name())
-		require.NoError(b, err)
+		requireNoError(b, err)
 		defer db.Close()
 
 		rand.Seed(time.Now().UnixNano())
@@ -380,7 +379,7 @@ func BenchmarkHashCollisions_Regular_vs_Mmap(b *testing.B) {
 
 	b.Run("Mmap_Collisions", func(b *testing.B) {
 		db, err := cdb.OpenMmap(f.Name())
-		require.NoError(b, err)
+		requireNoError(b, err)
 		defer db.Close()
 
 		rand.Seed(time.Now().UnixNano())
@@ -406,7 +405,7 @@ func BenchmarkMemoryFootprint_Regular_vs_Mmap(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			b.StopTimer()
 			db, err := cdb.Open(dbPath)
-			require.NoError(b, err)
+			requireNoError(b, err)
 
 			b.StartTimer()
 			// Perform several lookups to show memory pattern
@@ -427,7 +426,7 @@ func BenchmarkMemoryFootprint_Regular_vs_Mmap(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			b.StopTimer()
 			db, err := cdb.OpenMmap(dbPath)
-			require.NoError(b, err)
+			requireNoError(b, err)
 
 			b.StartTimer()
 			// Perform several lookups to show memory pattern

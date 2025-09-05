@@ -9,27 +9,25 @@ import (
 	"time"
 
 	"github.com/colinmarc/cdb"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func TestIterator(t *testing.T) {
 	db, err := cdb.Open("./test/test.cdb")
-	require.NoError(t, err)
-	require.NotNil(t, db)
+	requireNoError(t, err)
+	requireNotNil(t, db)
 
 	n := 0
 	iter := db.Iter()
 	for iter.Next() {
-		assert.Equal(t, string(expectedRecords[n][0]), string(iter.Key()))
-		assert.Equal(t, string(expectedRecords[n][1]), string(iter.Value()))
-		require.NoError(t, iter.Err())
+		assertEqual(t, string(expectedRecords[n][0]), string(iter.Key()))
+		assertEqual(t, string(expectedRecords[n][1]), string(iter.Value()))
+		requireNoError(t, iter.Err())
 		n++
 	}
 
-	assert.Equal(t, len(expectedRecords)-1, n)
+	assertEqual(t, len(expectedRecords)-1, n)
 
-	require.NoError(t, iter.Err())
+	requireNoError(t, iter.Err())
 }
 
 func BenchmarkIterator(b *testing.B) {
@@ -48,14 +46,14 @@ func BenchmarkIterator(b *testing.B) {
 func BenchmarkIterator64(b *testing.B) {
 	// Create a test database
 	f, err := os.CreateTemp("", "bench-iterator64")
-	require.NoError(b, err)
+	requireNoError(b, err)
 	defer func() {
 		f.Close()
 		os.Remove(f.Name())
 	}()
 
 	writer, err := cdb.NewWriter64(f, nil)
-	require.NoError(b, err)
+	requireNoError(b, err)
 
 	// Add test data
 	for i := 0; i < 1000; i++ {
@@ -65,7 +63,7 @@ func BenchmarkIterator64(b *testing.B) {
 	}
 
 	db, err := writer.Freeze()
-	require.NoError(b, err)
+	requireNoError(b, err)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {

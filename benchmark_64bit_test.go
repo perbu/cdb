@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/colinmarc/cdb"
-	"github.com/stretchr/testify/require"
 )
 
 // Helper functions for benchmark data generation
@@ -54,14 +53,14 @@ func generateRandomStringData(n int) [][][]byte {
 
 func BenchmarkWriter64_Put(b *testing.B) {
 	f, err := os.CreateTemp("", "bench-cdb64")
-	require.NoError(b, err)
+	requireNoError(b, err)
 	defer func() {
 		f.Close()
 		os.Remove(f.Name())
 	}()
 
 	writer, err := cdb.NewWriter64(f, nil)
-	require.NoError(b, err)
+	requireNoError(b, err)
 
 	// Generate test data
 	testData := generateRandomStringData(b.N)
@@ -82,10 +81,10 @@ func BenchmarkWriter64_PutBatch(b *testing.B) {
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
 				f, err := os.CreateTemp("", "bench-cdb64")
-				require.NoError(b, err)
+				requireNoError(b, err)
 
 				writer, err := cdb.NewWriter64(f, nil)
-				require.NoError(b, err)
+				requireNoError(b, err)
 
 				for _, record := range testData {
 					writer.Put(record[0], record[1])
@@ -110,10 +109,10 @@ func BenchmarkWriter64_Freeze(b *testing.B) {
 			for i := 0; i < b.N; i++ {
 				b.StopTimer()
 				f, err := os.CreateTemp("", "bench-cdb64")
-				require.NoError(b, err)
+				requireNoError(b, err)
 
 				writer, err := cdb.NewWriter64(f, nil)
-				require.NoError(b, err)
+				requireNoError(b, err)
 
 				// Pre-populate the writer
 				for _, record := range testData {
@@ -122,7 +121,7 @@ func BenchmarkWriter64_Freeze(b *testing.B) {
 
 				b.StartTimer()
 				db, err := writer.Freeze()
-				require.NoError(b, err)
+				requireNoError(b, err)
 
 				b.StopTimer()
 				db.Close()
@@ -144,10 +143,10 @@ func BenchmarkWriter64_LargeData(b *testing.B) {
 			for i := 0; i < b.N; i++ {
 				b.StopTimer()
 				f, err := os.CreateTemp("", "bench-cdb64")
-				require.NoError(b, err)
+				requireNoError(b, err)
 
 				writer, err := cdb.NewWriter64(f, nil)
-				require.NoError(b, err)
+				requireNoError(b, err)
 
 				b.StartTimer()
 				for _, record := range testData {
@@ -169,17 +168,17 @@ func BenchmarkWriter64_CreateAndWrite(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		f, err := os.CreateTemp("", "bench-cdb64")
-		require.NoError(b, err)
+		requireNoError(b, err)
 
 		writer, err := cdb.NewWriter64(f, nil)
-		require.NoError(b, err)
+		requireNoError(b, err)
 
 		for _, record := range testData {
 			writer.Put(record[0], record[1])
 		}
 
 		db, err := writer.Freeze()
-		require.NoError(b, err)
+		requireNoError(b, err)
 
 		db.Close()
 		f.Close()
@@ -192,14 +191,14 @@ func BenchmarkWriter64_CreateAndWrite(b *testing.B) {
 func BenchmarkIterator64_Next(b *testing.B) {
 	// Create a test database
 	f, err := os.CreateTemp("", "bench-cdb64")
-	require.NoError(b, err)
+	requireNoError(b, err)
 	defer func() {
 		f.Close()
 		os.Remove(f.Name())
 	}()
 
 	writer, err := cdb.NewWriter64(f, nil)
-	require.NoError(b, err)
+	requireNoError(b, err)
 
 	testData := generateTestData(10000, 20, 100)
 	for _, record := range testData {
@@ -207,7 +206,7 @@ func BenchmarkIterator64_Next(b *testing.B) {
 	}
 
 	db, err := writer.Freeze()
-	require.NoError(b, err)
+	requireNoError(b, err)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -227,14 +226,14 @@ func BenchmarkIterator64_FullScan(b *testing.B) {
 		b.Run(strconv.Itoa(recordCount), func(b *testing.B) {
 			// Create a test database
 			f, err := os.CreateTemp("", "bench-cdb64")
-			require.NoError(b, err)
+			requireNoError(b, err)
 			defer func() {
 				f.Close()
 				os.Remove(f.Name())
 			}()
 
 			writer, err := cdb.NewWriter64(f, nil)
-			require.NoError(b, err)
+			requireNoError(b, err)
 
 			testData := generateTestData(recordCount, 20, 100)
 			for _, record := range testData {
@@ -242,7 +241,7 @@ func BenchmarkIterator64_FullScan(b *testing.B) {
 			}
 
 			db, err := writer.Freeze()
-			require.NoError(b, err)
+			requireNoError(b, err)
 
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
@@ -266,14 +265,14 @@ func BenchmarkIterator64_LargeDB(b *testing.B) {
 		b.Run(strconv.Itoa(valueSize)+"B", func(b *testing.B) {
 			// Create a test database with large values
 			f, err := os.CreateTemp("", "bench-cdb64")
-			require.NoError(b, err)
+			requireNoError(b, err)
 			defer func() {
 				f.Close()
 				os.Remove(f.Name())
 			}()
 
 			writer, err := cdb.NewWriter64(f, nil)
-			require.NoError(b, err)
+			requireNoError(b, err)
 
 			testData := generateTestData(1000, 20, valueSize)
 			for _, record := range testData {
@@ -281,7 +280,7 @@ func BenchmarkIterator64_LargeDB(b *testing.B) {
 			}
 
 			db, err := writer.Freeze()
-			require.NoError(b, err)
+			requireNoError(b, err)
 
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
@@ -300,14 +299,14 @@ func BenchmarkIterator64_LargeDB(b *testing.B) {
 
 func BenchmarkWriterGeneric_uint32(b *testing.B) {
 	f, err := os.CreateTemp("", "bench-cdb-generic32")
-	require.NoError(b, err)
+	requireNoError(b, err)
 	defer func() {
 		f.Close()
 		os.Remove(f.Name())
 	}()
 
 	writer, err := cdb.NewWriterGeneric[uint32](f, nil)
-	require.NoError(b, err)
+	requireNoError(b, err)
 
 	testData := generateRandomStringData(b.N)
 
@@ -319,14 +318,14 @@ func BenchmarkWriterGeneric_uint32(b *testing.B) {
 
 func BenchmarkWriterGeneric_uint64(b *testing.B) {
 	f, err := os.CreateTemp("", "bench-cdb-generic64")
-	require.NoError(b, err)
+	requireNoError(b, err)
 	defer func() {
 		f.Close()
 		os.Remove(f.Name())
 	}()
 
 	writer, err := cdb.NewWriterGeneric[uint64](f, nil)
-	require.NoError(b, err)
+	requireNoError(b, err)
 
 	testData := generateRandomStringData(b.N)
 
@@ -339,14 +338,14 @@ func BenchmarkWriterGeneric_uint64(b *testing.B) {
 func BenchmarkIteratorGeneric_uint32(b *testing.B) {
 	// Create a test database
 	f, err := os.CreateTemp("", "bench-cdb-generic32")
-	require.NoError(b, err)
+	requireNoError(b, err)
 	defer func() {
 		f.Close()
 		os.Remove(f.Name())
 	}()
 
 	writer, err := cdb.NewWriterGeneric[uint32](f, nil)
-	require.NoError(b, err)
+	requireNoError(b, err)
 
 	testData := generateTestData(10000, 20, 100)
 	for _, record := range testData {
@@ -354,7 +353,7 @@ func BenchmarkIteratorGeneric_uint32(b *testing.B) {
 	}
 
 	db, err := writer.Freeze()
-	require.NoError(b, err)
+	requireNoError(b, err)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -369,14 +368,14 @@ func BenchmarkIteratorGeneric_uint32(b *testing.B) {
 func BenchmarkIteratorGeneric_uint64(b *testing.B) {
 	// Create a test database
 	f, err := os.CreateTemp("", "bench-cdb-generic64")
-	require.NoError(b, err)
+	requireNoError(b, err)
 	defer func() {
 		f.Close()
 		os.Remove(f.Name())
 	}()
 
 	writer, err := cdb.NewWriterGeneric[uint64](f, nil)
-	require.NoError(b, err)
+	requireNoError(b, err)
 
 	testData := generateTestData(10000, 20, 100)
 	for _, record := range testData {
@@ -384,7 +383,7 @@ func BenchmarkIteratorGeneric_uint64(b *testing.B) {
 	}
 
 	db, err := writer.Freeze()
-	require.NoError(b, err)
+	requireNoError(b, err)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -405,10 +404,10 @@ func BenchmarkComparison_Writer_Put_32vs64(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			b.StopTimer()
 			f, err := os.CreateTemp("", "bench-cmp-32")
-			require.NoError(b, err)
+			requireNoError(b, err)
 
 			writer, err := cdb.NewWriter(f, nil)
-			require.NoError(b, err)
+			requireNoError(b, err)
 
 			b.StartTimer()
 			for _, record := range testData {
@@ -426,10 +425,10 @@ func BenchmarkComparison_Writer_Put_32vs64(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			b.StopTimer()
 			f, err := os.CreateTemp("", "bench-cmp-64")
-			require.NoError(b, err)
+			requireNoError(b, err)
 
 			writer, err := cdb.NewWriter64(f, nil)
-			require.NoError(b, err)
+			requireNoError(b, err)
 
 			b.StartTimer()
 			for _, record := range testData {
@@ -447,14 +446,14 @@ func BenchmarkComparison_Writer_Put_32vs64(b *testing.B) {
 func BenchmarkComparison_Iterator_Scan_32vs64(b *testing.B) {
 	// Prepare 32-bit database
 	f32, err := os.CreateTemp("", "bench-cmp-32")
-	require.NoError(b, err)
+	requireNoError(b, err)
 	defer func() {
 		f32.Close()
 		os.Remove(f32.Name())
 	}()
 
 	writer32, err := cdb.NewWriter(f32, nil)
-	require.NoError(b, err)
+	requireNoError(b, err)
 
 	testData := generateTestData(10000, 20, 100)
 	for _, record := range testData {
@@ -462,25 +461,25 @@ func BenchmarkComparison_Iterator_Scan_32vs64(b *testing.B) {
 	}
 
 	db32, err := writer32.Freeze()
-	require.NoError(b, err)
+	requireNoError(b, err)
 
 	// Prepare 64-bit database
 	f64, err := os.CreateTemp("", "bench-cmp-64")
-	require.NoError(b, err)
+	requireNoError(b, err)
 	defer func() {
 		f64.Close()
 		os.Remove(f64.Name())
 	}()
 
 	writer64, err := cdb.NewWriter64(f64, nil)
-	require.NoError(b, err)
+	requireNoError(b, err)
 
 	for _, record := range testData {
 		writer64.Put(record[0], record[1])
 	}
 
 	db64, err := writer64.Freeze()
-	require.NoError(b, err)
+	requireNoError(b, err)
 
 	b.Run("Iterator32", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
@@ -510,10 +509,10 @@ func BenchmarkComparison_Generic_32vs64(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			b.StopTimer()
 			f, err := os.CreateTemp("", "bench-generic-32")
-			require.NoError(b, err)
+			requireNoError(b, err)
 
 			writer, err := cdb.NewWriterGeneric[uint32](f, nil)
-			require.NoError(b, err)
+			requireNoError(b, err)
 
 			b.StartTimer()
 			for _, record := range testData {
@@ -531,10 +530,10 @@ func BenchmarkComparison_Generic_32vs64(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			b.StopTimer()
 			f, err := os.CreateTemp("", "bench-generic-64")
-			require.NoError(b, err)
+			requireNoError(b, err)
 
 			writer, err := cdb.NewWriterGeneric[uint64](f, nil)
-			require.NoError(b, err)
+			requireNoError(b, err)
 
 			b.StartTimer()
 			for _, record := range testData {

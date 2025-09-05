@@ -5,18 +5,16 @@ import (
 	"testing"
 
 	"github.com/colinmarc/cdb"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func TestMmapCDB(t *testing.T) {
 	// Create a test database
 	f, err := os.CreateTemp("", "test-mmap")
-	require.NoError(t, err)
+	requireNoError(t, err)
 	defer os.Remove(f.Name())
 
 	writer, err := cdb.NewWriter(f, nil)
-	require.NoError(t, err)
+	requireNoError(t, err)
 
 	// Write test data
 	testData := map[string]string{
@@ -29,42 +27,42 @@ func TestMmapCDB(t *testing.T) {
 
 	for key, value := range testData {
 		err := writer.Put([]byte(key), []byte(value))
-		require.NoError(t, err)
+		requireNoError(t, err)
 	}
 
 	_, err = writer.Freeze()
-	require.NoError(t, err)
+	requireNoError(t, err)
 	f.Close()
 
 	// Test memory-mapped reading
 	db, err := cdb.OpenMmap(f.Name())
-	require.NoError(t, err)
+	requireNoError(t, err)
 	defer db.Close()
 
 	// Verify all data can be read correctly
 	for key, expectedValue := range testData {
 		value, err := db.Get([]byte(key))
-		require.NoError(t, err, "Failed to get key: %s", key)
-		assert.Equal(t, expectedValue, string(value), "Key: %s", key)
+		requireNoError(t, err, "Failed to get key: %s", key)
+		assertEqual(t, expectedValue, string(value), "Key: %s", key)
 	}
 
 	// Test non-existent key
 	value, err := db.Get([]byte("nonexistent"))
-	require.NoError(t, err)
-	assert.Nil(t, value)
+	requireNoError(t, err)
+	requireNil(t, value)
 
 	// Test size method
-	assert.True(t, db.Size() > 0)
+	assertTrue(t, db.Size() > 0)
 }
 
 func TestMmapCDB64(t *testing.T) {
 	// Create a test database
 	f, err := os.CreateTemp("", "test-mmap64")
-	require.NoError(t, err)
+	requireNoError(t, err)
 	defer os.Remove(f.Name())
 
 	writer, err := cdb.NewWriter64(f, nil)
-	require.NoError(t, err)
+	requireNoError(t, err)
 
 	// Write test data
 	testData := map[string]string{
@@ -77,32 +75,32 @@ func TestMmapCDB64(t *testing.T) {
 
 	for key, value := range testData {
 		err := writer.Put([]byte(key), []byte(value))
-		require.NoError(t, err)
+		requireNoError(t, err)
 	}
 
 	_, err = writer.Freeze()
-	require.NoError(t, err)
+	requireNoError(t, err)
 	f.Close()
 
 	// Test memory-mapped reading
 	db, err := cdb.OpenMmap64(f.Name())
-	require.NoError(t, err)
+	requireNoError(t, err)
 	defer db.Close()
 
 	// Verify all data can be read correctly
 	for key, expectedValue := range testData {
 		value, err := db.Get([]byte(key))
-		require.NoError(t, err, "Failed to get key: %s", key)
-		assert.Equal(t, expectedValue, string(value), "Key: %s", key)
+		requireNoError(t, err, "Failed to get key: %s", key)
+		assertEqual(t, expectedValue, string(value), "Key: %s", key)
 	}
 
 	// Test non-existent key
 	value, err := db.Get([]byte("nonexistent"))
-	require.NoError(t, err)
-	assert.Nil(t, value)
+	requireNoError(t, err)
+	requireNil(t, value)
 
 	// Test size method
-	assert.True(t, db.Size() > 0)
+	assertTrue(t, db.Size() > 0)
 }
 
 func TestMmapWithCustomHash(t *testing.T) {
@@ -118,102 +116,102 @@ func TestMmapWithCustomHash(t *testing.T) {
 
 	// Create database with custom hash
 	f, err := os.CreateTemp("", "test-mmap-hash")
-	require.NoError(t, err)
+	requireNoError(t, err)
 	defer os.Remove(f.Name())
 
 	writer, err := cdb.NewWriter(f, customHash)
-	require.NoError(t, err)
+	requireNoError(t, err)
 
 	err = writer.Put([]byte("test"), []byte("value"))
-	require.NoError(t, err)
+	requireNoError(t, err)
 
 	_, err = writer.Freeze()
-	require.NoError(t, err)
+	requireNoError(t, err)
 	f.Close()
 
 	// Read with same custom hash
 	db, err := cdb.OpenMmapWithHash(f.Name(), customHash)
-	require.NoError(t, err)
+	requireNoError(t, err)
 	defer db.Close()
 
 	value, err := db.Get([]byte("test"))
-	require.NoError(t, err)
-	assert.Equal(t, "value", string(value))
+	requireNoError(t, err)
+	assertEqual(t, "value", string(value))
 }
 
 func TestMmapErrorHandling(t *testing.T) {
 	// Test opening non-existent file
 	db, err := cdb.OpenMmap("nonexistent.cdb")
-	assert.Error(t, err)
-	assert.Nil(t, db)
+	assertError(t, err)
+	requireNil(t, db)
 
 	// Test with empty file (too small)
 	f, err := os.CreateTemp("", "test-empty")
-	require.NoError(t, err)
+	requireNoError(t, err)
 	defer os.Remove(f.Name())
 	f.Close()
 
 	db, err = cdb.OpenMmap(f.Name())
-	assert.Error(t, err)
-	assert.Nil(t, db)
+	assertError(t, err)
+	requireNil(t, db)
 }
 
 func TestMmapClose(t *testing.T) {
 	// Create a test database
 	f, err := os.CreateTemp("", "test-close")
-	require.NoError(t, err)
+	requireNoError(t, err)
 	defer os.Remove(f.Name())
 
 	writer, err := cdb.NewWriter(f, nil)
-	require.NoError(t, err)
+	requireNoError(t, err)
 
 	err = writer.Put([]byte("test"), []byte("value"))
-	require.NoError(t, err)
+	requireNoError(t, err)
 
 	_, err = writer.Freeze()
-	require.NoError(t, err)
+	requireNoError(t, err)
 	f.Close()
 
 	// Test that Close() can be called multiple times
 	db, err := cdb.OpenMmap(f.Name())
-	require.NoError(t, err)
+	requireNoError(t, err)
 
 	err = db.Close()
-	require.NoError(t, err)
+	requireNoError(t, err)
 
 	err = db.Close() // Should not panic
-	require.NoError(t, err)
+	requireNoError(t, err)
 }
 
 // Test compatibility between regular CDB and memory-mapped CDB
 func TestCompatibility_Regular_vs_Mmap(t *testing.T) {
 	// Create a test database
 	f, err := os.CreateTemp("", "test-compat")
-	require.NoError(t, err)
+	requireNoError(t, err)
 	defer os.Remove(f.Name())
 
 	writer, err := cdb.NewWriter(f, nil)
-	require.NoError(t, err)
+	requireNoError(t, err)
 
 	// Write the same test data used in regular tests
 	for _, record := range expectedRecords[:len(expectedRecords)-1] { // Skip the "not in the table" record
 		if record[1] != nil { // Skip records with nil values
 			err := writer.Put(record[0], record[1])
-			require.NoError(t, err)
+			requireNoError(t, err)
 		}
 	}
 
 	_, err = writer.Freeze()
-	require.NoError(t, err)
+	requireNoError(t, err)
 	f.Close()
 
 	// Open with both regular and mmap readers
 	regularDB, err := cdb.Open(f.Name())
-	require.NoError(t, err)
+	requireNoError(t, err)
 	defer regularDB.Close()
 
 	mmapDB, err := cdb.OpenMmap(f.Name())
-	require.NoError(t, err)
+	requireNoError(t, err)
 	defer mmapDB.Close()
 
 	// Test that both return the same results
@@ -222,9 +220,9 @@ func TestCompatibility_Regular_vs_Mmap(t *testing.T) {
 			regularValue, err1 := regularDB.Get(record[0])
 			mmapValue, err2 := mmapDB.Get(record[0])
 
-			require.NoError(t, err1)
-			require.NoError(t, err2)
-			assert.Equal(t, regularValue, mmapValue, "Values differ for key: %s", string(record[0]))
+			requireNoError(t, err1)
+			requireNoError(t, err2)
+			assertEqual(t, regularValue, mmapValue, "Values differ for key: %s", string(record[0]))
 		}
 	}
 
@@ -232,9 +230,9 @@ func TestCompatibility_Regular_vs_Mmap(t *testing.T) {
 	regularValue, err1 := regularDB.Get([]byte("definitely_not_there"))
 	mmapValue, err2 := mmapDB.Get([]byte("definitely_not_there"))
 
-	require.NoError(t, err1)
-	require.NoError(t, err2)
-	assert.Equal(t, regularValue, mmapValue)
-	assert.Nil(t, regularValue)
-	assert.Nil(t, mmapValue)
+	requireNoError(t, err1)
+	requireNoError(t, err2)
+	assertEqual(t, regularValue, mmapValue)
+	requireNil(t, regularValue)
+	requireNil(t, mmapValue)
 }
