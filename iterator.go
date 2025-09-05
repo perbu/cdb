@@ -127,3 +127,88 @@ func (iter *Iterator64) Value() []byte {
 func (iter *Iterator64) Err() error {
 	return iter.err
 }
+
+// IteratorGeneric represents a sequential iterator over a generic CDB database.
+type IteratorGeneric[T Unsigned] struct {
+	db     *CDBGeneric[T]
+	pos    T
+	endPos T
+	err    error
+	key    []byte
+	value  []byte
+}
+
+// Iter creates an IteratorGeneric that can be used to iterate the database.
+func (cdb *CDBGeneric[T]) Iter() *IteratorGeneric[T] {
+	var startPos T
+	switch any(*new(T)).(type) {
+	case uint32:
+		startPos = T(indexSize)
+	case uint64:
+		startPos = T(indexSize64)
+	}
+
+	return &IteratorGeneric[T]{
+		db:     cdb,
+		pos:    startPos,
+		endPos: cdb.index[0].offset,
+	}
+}
+
+// Next reads the next key/value pair and advances the iterator one record.
+// It returns false when the scan stops, either by reaching the end of the
+// database or an error. After Next returns false, the Err method will return
+// any error that occurred while iterating.
+func (iter *IteratorGeneric[T]) Next() bool {
+	if iter.pos >= iter.endPos {
+		return false
+	}
+
+	keyLength, valueLength, err := readTupleGeneric[T](iter.db.reader, iter.pos)
+	if err != nil {
+		iter.err = err
+		return false
+	}
+
+	buf := make([]byte, keyLength+valueLength)
+
+	var headerSize T
+	switch any(*new(T)).(type) {
+	case uint32:
+		headerSize = 8
+	case uint64:
+		headerSize = 16
+	}
+
+	_, err = iter.db.reader.ReadAt(buf, int64(iter.pos+headerSize))
+	if err != nil {
+		iter.err = err
+		return false
+	}
+
+	// Update iterator state
+	iter.key = buf[:keyLength]
+	iter.value = buf[keyLength:]
+	iter.pos += headerSize + keyLength + valueLength
+
+	return true
+}
+
+// Key returns the current key.
+func (iter *IteratorGeneric[T]) Key() []byte {
+	return iter.key
+}
+
+// Value returns the current value.
+func (iter *IteratorGeneric[T]) Value() []byte {
+	return iter.value
+}
+
+// Err returns the current error.
+func (iter *IteratorGeneric[T]) Err() error {
+	return iter.err
+}
+
+// Backward compatibility type aliases
+type Iterator32 = IteratorGeneric[uint32]
+type Iterator64Alt = IteratorGeneric[uint64]

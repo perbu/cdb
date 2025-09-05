@@ -2,7 +2,6 @@ package cdb_test
 
 import (
 	"hash/fnv"
-	"io/ioutil"
 	"log"
 	"math/rand"
 	"os"
@@ -47,7 +46,7 @@ func testWritesReadable(t *testing.T, writer *cdb.Writer) {
 }
 
 func TestWritesReadable(t *testing.T) {
-	f, err := ioutil.TempFile("", "test-cdb")
+	f, err := os.CreateTemp("", "test-cdb")
 	require.NoError(t, err)
 	defer os.Remove(f.Name())
 
@@ -59,7 +58,7 @@ func TestWritesReadable(t *testing.T) {
 }
 
 func TestWritesReadableFnv(t *testing.T) {
-	f, err := ioutil.TempFile("", "test-cdb")
+	f, err := os.CreateTemp("", "test-cdb")
 	require.NoError(t, err)
 	defer os.Remove(f.Name())
 
@@ -106,7 +105,7 @@ func testWritesRandom(t *testing.T, writer *cdb.Writer) {
 }
 
 func TestWritesRandom(t *testing.T) {
-	f, err := ioutil.TempFile("", "test-cdb")
+	f, err := os.CreateTemp("", "test-cdb")
 	require.NoError(t, err)
 	defer os.Remove(f.Name())
 
@@ -118,7 +117,7 @@ func TestWritesRandom(t *testing.T) {
 }
 
 func TestWritesRandomFnv(t *testing.T) {
-	f, err := ioutil.TempFile("", "test-cdb")
+	f, err := os.CreateTemp("", "test-cdb")
 	require.NoError(t, err)
 	defer os.Remove(f.Name())
 
@@ -144,7 +143,7 @@ func benchmarkPut(b *testing.B, writer *cdb.Writer) {
 }
 
 func BenchmarkPut(b *testing.B) {
-	f, err := ioutil.TempFile("", "test-cdb")
+	f, err := os.CreateTemp("", "test-cdb")
 	require.NoError(b, err)
 	defer func() {
 		f.Close()
@@ -158,7 +157,7 @@ func BenchmarkPut(b *testing.B) {
 }
 
 func BenchmarkPutFnv(b *testing.B) {
-	f, err := ioutil.TempFile("", "test-cdb")
+	f, err := os.CreateTemp("", "test-cdb")
 	require.NoError(b, err)
 	defer func() {
 		f.Close()
