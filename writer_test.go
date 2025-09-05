@@ -170,6 +170,31 @@ func BenchmarkPutFnv(b *testing.B) {
 	benchmarkPut(b, writer)
 }
 
+// BenchmarkPut64 benchmarks the 64-bit writer Put method
+func BenchmarkPut64(b *testing.B) {
+	f, err := os.CreateTemp("", "test-cdb64")
+	require.NoError(b, err)
+	defer func() {
+		f.Close()
+		os.Remove(f.Name())
+	}()
+
+	writer, err := cdb.NewWriter64(f, nil)
+	require.NoError(b, err)
+
+	random := rand.New(rand.NewSource(time.Now().UnixNano()))
+	stringType := reflect.TypeOf("")
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		key, _ := quick.Value(stringType, random)
+		value, _ := quick.Value(stringType, random)
+		keyBytes := []byte(key.String())
+		valueBytes := []byte(value.String())
+
+		writer.Put(keyBytes, valueBytes)
+	}
+}
+
 func ExampleWriter() {
 	writer, err := cdb.Create("/tmp/example.cdb")
 	if err != nil {

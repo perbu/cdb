@@ -5,7 +5,7 @@ go 1.23.0
 require (
 	github.com/Pallinder/go-randomdata v1.1.0
 	github.com/stretchr/testify v1.3.0
-	golang.org/x/exp v0.0.0-20220303212507-bbda1eaf7a17
+	golang.org/x/sys v0.0.0-20211019181941-9d821ace8654
 )
 
 require (
