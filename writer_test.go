@@ -1,8 +1,6 @@
 package cdb_test
 
 import (
-	"hash/fnv"
-	"log"
 	"math/rand"
 	"os"
 	"reflect"
@@ -11,7 +9,7 @@ import (
 	"testing/quick"
 	"time"
 
-	"github.com/colinmarc/cdb"
+	"github.com/perbu/cdb"
 )
 
 func randomString(r *rand.Rand, length int) string {
@@ -21,12 +19,6 @@ func randomString(r *rand.Rand, length int) string {
 		b[i] = charset[r.Intn(len(charset))]
 	}
 	return string(b)
-}
-
-func fnvHash(data []byte) uint32 {
-	h := fnv.New32a()
-	h.Write(data)
-	return h.Sum32()
 }
 
 func testWritesReadable(t *testing.T, writer *cdb.Writer) {
@@ -57,19 +49,7 @@ func TestWritesReadable(t *testing.T) {
 	requireNoError(t, err)
 	defer os.Remove(f.Name())
 
-	writer, err := cdb.NewWriter(f, nil)
-	requireNoError(t, err)
-	requireNotNil(t, writer)
-
-	testWritesReadable(t, writer)
-}
-
-func TestWritesReadableFnv(t *testing.T) {
-	f, err := os.CreateTemp("", "test-cdb")
-	requireNoError(t, err)
-	defer os.Remove(f.Name())
-
-	writer, err := cdb.NewWriter(f, fnvHash)
+	writer, err := cdb.NewWriter(f)
 	requireNoError(t, err)
 	requireNotNil(t, writer)
 
@@ -116,19 +96,7 @@ func TestWritesRandom(t *testing.T) {
 	requireNoError(t, err)
 	defer os.Remove(f.Name())
 
-	writer, err := cdb.NewWriter(f, nil)
-	requireNoError(t, err)
-	requireNotNil(t, writer)
-
-	testWritesRandom(t, writer)
-}
-
-func TestWritesRandomFnv(t *testing.T) {
-	f, err := os.CreateTemp("", "test-cdb")
-	requireNoError(t, err)
-	defer os.Remove(f.Name())
-
-	writer, err := cdb.NewWriter(f, fnvHash)
+	writer, err := cdb.NewWriter(f)
 	requireNoError(t, err)
 	requireNotNil(t, writer)
 
@@ -157,63 +125,8 @@ func BenchmarkPut(b *testing.B) {
 		os.Remove(f.Name())
 	}()
 
-	writer, err := cdb.NewWriter(f, nil)
+	writer, err := cdb.NewWriter(f)
 	requireNoError(b, err)
 
 	benchmarkPut(b, writer)
-}
-
-func BenchmarkPutFnv(b *testing.B) {
-	f, err := os.CreateTemp("", "test-cdb")
-	requireNoError(b, err)
-	defer func() {
-		f.Close()
-		os.Remove(f.Name())
-	}()
-
-	writer, err := cdb.NewWriter(f, fnvHash)
-	requireNoError(b, err)
-
-	benchmarkPut(b, writer)
-}
-
-// BenchmarkPut64 benchmarks the 64-bit writer Put method
-func BenchmarkPut64(b *testing.B) {
-	f, err := os.CreateTemp("", "test-cdb64")
-	requireNoError(b, err)
-	defer func() {
-		f.Close()
-		os.Remove(f.Name())
-	}()
-
-	writer, err := cdb.NewWriter(f, nil)
-	requireNoError(b, err)
-
-	random := rand.New(rand.NewSource(time.Now().UnixNano()))
-	stringType := reflect.TypeOf("")
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		key, _ := quick.Value(stringType, random)
-		value, _ := quick.Value(stringType, random)
-		keyBytes := []byte(key.String())
-		valueBytes := []byte(value.String())
-
-		writer.Put(keyBytes, valueBytes)
-	}
-}
-
-func ExampleWriter() {
-	writer, err := cdb.Create("/tmp/example.cdb")
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	// Write some key/value pairs to the database.
-	writer.Put([]byte("Alice"), []byte("Practice"))
-	writer.Put([]byte("Bob"), []byte("Hope"))
-	writer.Put([]byte("Charlie"), []byte("Horse"))
-
-	// It's important to call Close or Freeze when you're finished writing
-	// records.
-	writer.Close()
 }

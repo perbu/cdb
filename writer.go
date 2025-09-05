@@ -30,7 +30,6 @@ type entry struct {
 // Close or Freeze must be called to finalize the database, or the resulting
 // file will be invalid.
 type Writer struct {
-	hash         func([]byte) uint32
 	writer       io.WriteSeeker
 	entries      [256][]entry
 	finalizeOnce sync.Once
@@ -48,13 +47,11 @@ func Create(path string) (*Writer, error) {
 		return nil, err
 	}
 
-	return NewWriter(f, nil)
+	return NewWriter(f)
 }
 
 // NewWriter opens a 64-bit CDB database for the given io.WriteSeeker.
-//
-// If hash is nil, it will default to the CDB hash function.
-func NewWriter(writer io.WriteSeeker, hash func([]byte) uint32) (*Writer, error) {
+func NewWriter(writer io.WriteSeeker) (*Writer, error) {
 	// Leave 256 * 16 bytes for the index at the head of the file.
 	_, err := writer.Seek(0, os.SEEK_SET)
 	if err != nil {
@@ -66,12 +63,7 @@ func NewWriter(writer io.WriteSeeker, hash func([]byte) uint32) (*Writer, error)
 		return nil, err
 	}
 
-	if hash == nil {
-		hash = cdbHash
-	}
-
 	return &Writer{
-		hash:           hash,
 		writer:         writer,
 		bufferedWriter: bufio.NewWriterSize(writer, 65536),
 		bufferedOffset: indexSize,
@@ -88,7 +80,7 @@ func (cdb *Writer) Put(key, value []byte) error {
 	}
 
 	// Record the entry in the hash table, to be written out at the end.
-	hash := cdb.hash(key)
+	hash := cdbHash(key)
 	table := hash & 0xff
 
 	entry := entry{hash: hash, offset: uint64(cdb.bufferedOffset)}
@@ -159,7 +151,7 @@ func (cdb *Writer) Freeze() (*MmapCDB, error) {
 
 	// Convert io.WriteSeeker to *os.File if possible
 	if file, ok := cdb.writer.(*os.File); ok {
-		return NewMmap(file, cdb.hash)
+		return NewMmap(file)
 	}
 
 	// If it's not a file, we can't create a memory-mapped version
@@ -172,34 +164,26 @@ func (cdb *Writer) finalize() (index, error) {
 		err = cdb.doFinalize()
 	})
 
-	if err != nil {
-		return index{}, err
-	}
-
-	var idx index
-	// Build the index from the finalized data
-	for i := 0; i < 256; i++ {
-		tableEntries := cdb.entries[i]
-		tableSize := uint64(len(tableEntries) << 1)
-
-		idx[i] = table{
-			offset: uint64(cdb.bufferedOffset) + uint64(i*int(tableSize)*16),
-			length: tableSize,
-		}
-	}
-
-	return idx, nil
+	// Return empty index since doFinalize already writes the index to file
+	return index{}, err
 }
 
 func (cdb *Writer) doFinalize() error {
+	// Store table offsets as we write hash tables
+	var tableOffsets [256]uint64
+
 	// Create hash tables and write them to the file
 	for i := 0; i < 256; i++ {
 		tableEntries := cdb.entries[i]
 		tableSize := uint64(len(tableEntries) << 1)
 
 		if tableSize == 0 {
+			tableOffsets[i] = 0 // No table for this bucket
 			continue
 		}
+
+		// Record where this table will be written
+		tableOffsets[i] = uint64(cdb.bufferedOffset)
 
 		// Create hash table
 		hashTable := make([]entry, tableSize)
@@ -229,29 +213,37 @@ func (cdb *Writer) doFinalize() error {
 		}
 	}
 
-	// Write index
+	// Flush the buffered writer before seeking
+	err := cdb.bufferedWriter.Flush()
+	if err != nil {
+		return err
+	}
+
+	// Write index using actual table offsets
 	buf := make([]byte, indexSize)
 	for i := 0; i < 256; i++ {
 		tableEntries := cdb.entries[i]
 		tableSize := uint64(len(tableEntries) << 1)
 
-		// Calculate table offset
-		tableOffset := indexSize
-		for j := 0; j < i; j++ {
-			prevTableSize := uint64(len(cdb.entries[j]) << 1)
-			tableOffset += int(prevTableSize * 16)
-		}
-
-		binary.LittleEndian.PutUint64(buf[i*16:i*16+8], uint64(tableOffset))
+		binary.LittleEndian.PutUint64(buf[i*16:i*16+8], tableOffsets[i])
 		binary.LittleEndian.PutUint64(buf[i*16+8:i*16+16], tableSize)
 	}
 
 	// Seek to beginning and write index
-	_, err := cdb.writer.Seek(0, os.SEEK_SET)
+	_, err = cdb.writer.Seek(0, os.SEEK_SET)
 	if err != nil {
 		return err
 	}
 
 	_, err = cdb.writer.Write(buf)
+	return err
+}
+
+func writeTuple64(w io.Writer, first, second uint64) error {
+	tuple := make([]byte, 16)
+	binary.LittleEndian.PutUint64(tuple[:8], first)
+	binary.LittleEndian.PutUint64(tuple[8:], second)
+
+	_, err := w.Write(tuple)
 	return err
 }

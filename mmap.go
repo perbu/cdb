@@ -2,6 +2,7 @@ package cdb
 
 import (
 	"encoding/binary"
+	"iter"
 	"os"
 	"syscall"
 
@@ -11,35 +12,22 @@ import (
 // MmapCDB represents a memory-mapped 64-bit CDB database.
 type MmapCDB struct {
 	data  []byte
-	hash  func([]byte) uint32
 	index index
 	file  *os.File
 }
 
 // OpenMmap opens a 64-bit CDB file using memory mapping.
 func OpenMmap(path string) (*MmapCDB, error) {
-	return OpenMmapWithHash(path, nil)
-}
-
-// OpenMmapWithHash opens a 64-bit CDB file using memory mapping with a custom hash function.
-func OpenMmapWithHash(path string, hash func([]byte) uint32) (*MmapCDB, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
 	}
 
-	if hash == nil {
-		hash = cdbHash
-	}
-
-	return NewMmap(f, hash)
+	return NewMmap(f)
 }
 
 // NewMmap creates a memory-mapped 64-bit CDB from an open file.
-func NewMmap(file *os.File, hash func([]byte) uint32) (*MmapCDB, error) {
-	if hash == nil {
-		hash = cdbHash
-	}
+func NewMmap(file *os.File) (*MmapCDB, error) {
 
 	stat, err := file.Stat()
 	if err != nil {
@@ -61,7 +49,6 @@ func NewMmap(file *os.File, hash func([]byte) uint32) (*MmapCDB, error) {
 
 	cdb := &MmapCDB{
 		data: data,
-		hash: hash,
 		file: file,
 	}
 
@@ -76,7 +63,7 @@ func NewMmap(file *os.File, hash func([]byte) uint32) (*MmapCDB, error) {
 
 // Get returns the value for a given key using memory-mapped access.
 func (cdb *MmapCDB) Get(key []byte) ([]byte, error) {
-	hash := cdb.hash(key)
+	hash := cdbHash(key)
 
 	table := cdb.index[hash&0xff]
 	if table.length == 0 {
@@ -200,4 +187,80 @@ func equalBytes(a, b []byte) bool {
 // Size returns the size of the memory-mapped data.
 func (cdb *MmapCDB) Size() int {
 	return len(cdb.data)
+}
+
+// All returns an iterator over all key-value pairs in the database.
+func (cdb *MmapCDB) All() iter.Seq2[[]byte, []byte] {
+	return func(yield func([]byte, []byte) bool) {
+		// Find the minimum table offset to determine where data section ends
+		var endPos uint64
+		endPos = uint64(len(cdb.data)) // Start with file size, then find minimum table offset
+
+		for i := 0; i < 256; i++ {
+			if cdb.index[i].length > 0 && cdb.index[i].offset < endPos {
+				endPos = cdb.index[i].offset
+			}
+		}
+
+		// If no hash tables exist, data goes to end of file
+		if endPos == uint64(len(cdb.data)) {
+			// For empty database, endPos should be indexSize
+			if endPos == uint64(indexSize) {
+				endPos = uint64(indexSize)
+			}
+		}
+
+		pos := uint64(indexSize)
+		for pos < endPos {
+			// Ensure we don't read past the end of mapped data
+			if int(pos)+16 > len(cdb.data) {
+				return
+			}
+
+			keyLength, valueLength := readTupleMmap(cdb.data, pos)
+
+			// Calculate total record size and check bounds
+			totalSize := 16 + keyLength + valueLength
+			if int(pos+totalSize) > len(cdb.data) {
+				return
+			}
+
+			// Extract key and value directly from mmap data
+			dataStart := int(pos + 16)
+			keyEnd := dataStart + int(keyLength)
+			valueEnd := keyEnd + int(valueLength)
+
+			key := cdb.data[dataStart:keyEnd]
+			value := cdb.data[keyEnd:valueEnd]
+
+			// Yield the key-value pair
+			if !yield(key, value) {
+				return // Early termination requested
+			}
+
+			pos += totalSize
+		}
+	}
+}
+
+// Keys returns an iterator over all keys in the database.
+func (cdb *MmapCDB) Keys() iter.Seq[[]byte] {
+	return func(yield func([]byte) bool) {
+		for key, _ := range cdb.All() {
+			if !yield(key) {
+				return
+			}
+		}
+	}
+}
+
+// Values returns an iterator over all values in the database.
+func (cdb *MmapCDB) Values() iter.Seq[[]byte] {
+	return func(yield func([]byte) bool) {
+		for _, value := range cdb.All() {
+			if !yield(value) {
+				return
+			}
+		}
+	}
 }

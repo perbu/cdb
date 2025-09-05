@@ -1,5 +1,5 @@
-module github.com/colinmarc/cdb
+module github.com/perbu/cdb
 
 go 1.23.0
 
-require golang.org/x/sys v0.1.0
+require golang.org/x/sys v0.35.0

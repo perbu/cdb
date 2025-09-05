@@ -1,6 +1,7 @@
 package cdb_test
 
 import (
+	"bytes"
 	"fmt"
 	"log"
 	"math/rand"
@@ -8,24 +9,36 @@ import (
 	"testing"
 	"time"
 
-	"github.com/colinmarc/cdb"
+	"github.com/perbu/cdb"
 )
 
 var expectedRecords = [][][]byte{
-	{[]byte("foo"), []byte("bar")},
-	{[]byte("baz"), []byte("quuuux")},
-	{[]byte("playwright"), []byte("wow")},
-	{[]byte("crystal"), []byte("CASTLES")},
-	{[]byte("CRYSTAL"), []byte("castles")},
-	{[]byte("snush"), []byte("collision!")}, // 'playwright' collides with 'snush' in cdbhash
-	{[]byte("a"), []byte("a")},
-	{[]byte("empty_value"), []byte("")},
-	{[]byte(""), []byte("empty_key")},
+	{[]byte("key"), []byte("value")},
+	{[]byte("alpha"), []byte("first")},
+	{[]byte("beta"), []byte("second")},
+	{[]byte("gamma"), []byte("third")},
+	{[]byte("counter:1"), []byte("1")},
+	{[]byte("counter:2"), []byte("2")},
+	{[]byte("empty"), []byte("")},
+	{[]byte("binary"), []byte("\x00\x01\x02\xff\xfe")},
+	{[]byte("newline"), []byte("line1\nline2\n")},
+	{[]byte("json"), []byte("{\"ok\":true,\"n\":42}")},
+	{[]byte("path:/var/log/syslog"), []byte("/var/log/syslog")},
+	{[]byte("user:1001"), []byte("per")},
+	{[]byte("user:1002"), []byte("anna")},
+	{[]byte("duplicate"), []byte("v1")},
+	{[]byte("null-in-key:\x00suffix"), []byte("works")},
+	{[]byte("long:value"), []byte(string(bytes.Repeat([]byte("A"), 1024)))}, // 1 KiB of 'A'
+	{[]byte("kv:small"), []byte("s")},
+	{[]byte("kv:medium"), []byte(string(bytes.Repeat([]byte("m"), 128)))}, // 128 'm' characters
+	{[]byte("utf8:key"), []byte("norsk: ø æ å")},
 	{[]byte("not in the table"), nil},
 }
 
+const testFile = "./test/test.cdb64"
+
 func TestGet(t *testing.T) {
-	db, err := cdb.OpenMmap("./test/test.cdb")
+	db, err := cdb.OpenMmap(testFile)
 	requireNoError(t, err)
 	requireNotNil(t, db)
 
@@ -42,10 +55,10 @@ func TestGet(t *testing.T) {
 }
 
 func TestClosesFile(t *testing.T) {
-	f, err := os.Open("./test/test.cdb")
+	f, err := os.Open(testFile)
 	requireNoError(t, err)
 
-	db, err := cdb.NewMmap(f, nil)
+	db, err := cdb.NewMmap(f)
 	requireNoError(t, err)
 	requireNotNil(t, db)
 
@@ -57,13 +70,33 @@ func TestClosesFile(t *testing.T) {
 }
 
 func BenchmarkGet(b *testing.B) {
-	db, _ := cdb.OpenMmap("./test/test.cdb")
-	b.ResetTimer()
+	// Create a temporary CDB file for benchmarking
+	writer, err := cdb.Create("/tmp/benchmark.cdb")
+	if err != nil {
+		b.Fatal(err)
+	}
 
+	// Add the expected records to the database
+	for _, record := range expectedRecords[:len(expectedRecords)-1] { // Skip the "not in table" entry
+		if record[1] != nil { // Skip nil values
+			writer.Put(record[0], record[1])
+		}
+	}
+
+	db, err := writer.Freeze()
+	if err != nil {
+		b.Fatal(err)
+	}
+	defer db.Close()
+
+	b.ResetTimer()
 	rand.Seed(time.Now().UnixNano())
 	for i := 0; i < b.N; i++ {
-		record := expectedRecords[rand.Intn(len(expectedRecords))]
-		db.Get(record[0])
+		// Only use records that actually exist in the database
+		record := expectedRecords[rand.Intn(len(expectedRecords)-1)]
+		if record[1] != nil {
+			db.Get(record[0])
+		}
 	}
 }
 
@@ -95,19 +128,19 @@ func Example() {
 }
 
 func ExampleMmapCDB() {
-	db, err := cdb.OpenMmap("./test/test.cdb")
+	db, err := cdb.OpenMmap("./test/test.cdb64")
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	// Fetch a value.
-	v, err := db.Get([]byte("foo"))
+	v, err := db.Get([]byte("key"))
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	fmt.Println(string(v))
-	// Output: bar
+	// Output: value
 }
 
 func shuffle(a [][][]byte) {
@@ -116,37 +149,6 @@ func shuffle(a [][][]byte) {
 		j := rand.Intn(i + 1)
 		a[i], a[j] = a[j], a[i]
 	}
-}
-
-func TestCDB64WithPythonFile(t *testing.T) {
-	// Test reading a 64-bit CDB file created by python-pure-cdb
-	db, err := cdb.OpenMmap("test_64bit.cdb")
-	if err != nil {
-		t.Skip("Skipping CDB64 test - test_64bit.cdb not found:", err)
-		return
-	}
-	defer db.Close()
-
-	// Test known key-value pairs from our Python test script
-	testCases := map[string]string{
-		"Alice":   "Practice",
-		"Bob":     "Hope",
-		"Charlie": "Horse",
-		"foo":     "bar",
-		"baz":     "quuuux",
-	}
-
-	for key, expectedValue := range testCases {
-		value, err := db.Get([]byte(key))
-		requireNoError(t, err, "Key: %s", key)
-		assertEqual(t, []byte(expectedValue), value, "Key: %s", key)
-	}
-
-	// Test non-existent key
-	value, err := db.Get([]byte("nonexistent"))
-	requireNoError(t, err)
-	requireNil(t, value)
-
 }
 
 func TestWriter64(t *testing.T) {
