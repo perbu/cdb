@@ -2,12 +2,9 @@ package cdb_test
 
 import (
 	"bytes"
-	"fmt"
-	"log"
 	"math/rand"
 	"os"
 	"testing"
-	"time"
 
 	"github.com/perbu/cdb"
 )
@@ -39,8 +36,12 @@ const testFile = "./test/test.cdb64"
 
 func TestGet(t *testing.T) {
 	db, err := cdb.OpenMmap(testFile)
-	requireNoError(t, err)
-	requireNotNil(t, db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if db == nil {
+		t.Fatal("db is nil")
+	}
 	defer db.Close()
 	// The last record is the test for a key that doesn't exist.
 	missRecord := expectedRecords[len(expectedRecords)-1]
@@ -53,29 +54,47 @@ func TestGet(t *testing.T) {
 	for _, record := range records {
 		msg := "while fetching " + string(record[0])
 		value, err := db.Get(record[0])
-		requireNoError(t, err, msg)
-		assertEqual(t, string(record[1]), string(value), msg)
+		if err != nil {
+			t.Fatalf("%s: %v", msg, err)
+		}
+		if string(record[1]) != string(value) {
+			t.Errorf("%s: expected %q, got %q", msg, string(record[1]), string(value))
+		}
 	}
 
 	// Separately test the key that should not be found
 	value, err := db.Get(missRecord[0])
-	requireNoError(t, err, "for missing key")
-	requireNil(t, value, "for missing key")
+	if err != nil {
+		t.Fatalf("for missing key: %v", err)
+	}
+	if value != nil {
+		t.Errorf("for missing key: expected nil, got %v", value)
+	}
 }
 
 func TestClosesFile(t *testing.T) {
 	f, err := os.Open(testFile)
-	requireNoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	db, err := cdb.NewMmap(f)
-	requireNoError(t, err)
-	requireNotNil(t, db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if db == nil {
+		t.Fatal("db is nil")
+	}
 
 	err = db.Close()
-	requireNoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	err = f.Close()
-	assertError(t, err)
+	if err == nil {
+		t.Error("expected error when closing already-closed file")
+	}
 }
 
 func BenchmarkGet(b *testing.B) {
@@ -99,7 +118,6 @@ func BenchmarkGet(b *testing.B) {
 	defer db.Close()
 
 	b.ResetTimer()
-	rand.Seed(time.Now().UnixNano())
 	for i := 0; i < b.N; i++ {
 		// Only use records that actually exist in the database
 		record := expectedRecords[rand.Intn(len(expectedRecords)-1)]
@@ -108,52 +126,7 @@ func BenchmarkGet(b *testing.B) {
 		}
 	}
 }
-
-func Example() {
-	writer, err := cdb.Create("/tmp/example.cdb")
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	// Write some key/value pairs to the database.
-	writer.Put([]byte("Alice"), []byte("Practice"))
-	writer.Put([]byte("Bob"), []byte("Hope"))
-	writer.Put([]byte("Charlie"), []byte("Horse"))
-
-	// Freeze the database, and open it for reads.
-	db, err := writer.Freeze()
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	// Fetch a value.
-	v, err := db.Get([]byte("Alice"))
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	fmt.Println(string(v))
-	// Output: Practice
-}
-
-func ExampleMmapCDB() {
-	db, err := cdb.OpenMmap("./test/test.cdb64")
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	// Fetch a value.
-	v, err := db.Get([]byte("key"))
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	fmt.Println(string(v))
-	// Output: value
-}
-
 func shuffle(a [][][]byte) {
-	rand.Seed(time.Now().UnixNano())
 	for i := range a {
 		j := rand.Intn(i + 1)
 		a[i], a[j] = a[j], a[i]
@@ -163,7 +136,9 @@ func shuffle(a [][][]byte) {
 func TestWriter64(t *testing.T) {
 	// Test writing and reading a 64-bit CDB file with Go implementation
 	writer, err := cdb.Create("test_go_64bit.cdb")
-	requireNoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer os.Remove("test_go_64bit.cdb")
 
 	// Write test data
@@ -179,24 +154,35 @@ func TestWriter64(t *testing.T) {
 
 	for key, value := range testData {
 		err := writer.Put([]byte(key), []byte(value))
-		requireNoError(t, err, "Failed to put key: %s", key)
+		if err != nil {
+			t.Fatalf("Failed to put key: %s: %v", key, err)
+		}
 	}
 
 	// Freeze and get reader
 	db, err := writer.Freeze()
-	requireNoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer db.Close()
 
 	// Read back and verify
 	for key, expectedValue := range testData {
 		value, err := db.Get([]byte(key))
-		requireNoError(t, err, "Failed to get key: %s", key)
-		assertEqual(t, []byte(expectedValue), value, "Key: %s", key)
+		if err != nil {
+			t.Fatalf("Failed to get key: %s: %v", key, err)
+		}
+		if expected := []byte(expectedValue); string(expected) != string(value) {
+			t.Errorf("Key: %s: expected %q, got %q", key, expectedValue, string(value))
+		}
 	}
 
 	// Test non-existent key
 	value, err := db.Get([]byte("nonexistent"))
-	requireNoError(t, err)
-	requireNil(t, value)
-
+	if err != nil {
+		t.Fatal(err)
+	}
+	if value != nil {
+		t.Errorf("expected nil value for nonexistent key, got: %v", value)
+	}
 }

@@ -11,11 +11,15 @@ import (
 func TestMmapCDB(t *testing.T) {
 	// Create a test database
 	f, err := os.CreateTemp("", "test-mmap64")
-	requireNoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer os.Remove(f.Name())
 
 	writer, err := cdb.NewWriter(f)
-	requireNoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// Write test data
 	testData := map[string]string{
@@ -28,86 +32,130 @@ func TestMmapCDB(t *testing.T) {
 
 	for key, value := range testData {
 		err := writer.Put([]byte(key), []byte(value))
-		requireNoError(t, err)
+		if err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	_, err = writer.Freeze()
-	requireNoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 	f.Close()
 
 	// Test memory-mapped reading
 	db, err := cdb.OpenMmap(f.Name())
-	requireNoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer db.Close()
 
 	// Verify all data can be read correctly
 	for key, expectedValue := range testData {
 		value, err := db.Get([]byte(key))
-		requireNoError(t, err, "Failed to get key: %s", key)
-		assertEqual(t, expectedValue, string(value), "Key: %s", key)
+		if err != nil {
+			t.Fatalf("Failed to get key: %s: %v", key, err)
+		}
+		if expectedValue != string(value) {
+			t.Errorf("Key: %s: expected %q, got %q", key, expectedValue, string(value))
+		}
 	}
 
 	// Test non-existent key
 	value, err := db.Get([]byte("nonexistent"))
-	requireNoError(t, err)
-	requireNil(t, value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if value != nil {
+		t.Errorf("expected nil value for nonexistent key, got: %v", value)
+	}
 
 	// Test size method
-	assertTrue(t, db.Size() > 0)
+	if !(db.Size() > 0) {
+		t.Error("expected db.Size() > 0")
+	}
 }
 
 func TestMmapErrorHandling(t *testing.T) {
 	// Test opening non-existent file
 	db, err := cdb.OpenMmap("nonexistent.cdb")
-	assertError(t, err)
-	requireNil(t, db)
+	if err == nil {
+		t.Error("expected error for nonexistent file")
+	}
+	if db != nil {
+		t.Error("expected nil db on error")
+	}
 
 	// Test with empty file (too small)
 	f, err := os.CreateTemp("", "test-empty")
-	requireNoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer os.Remove(f.Name())
 	f.Close()
 
 	db, err = cdb.OpenMmap(f.Name())
-	assertError(t, err)
-	requireNil(t, db)
+	if err == nil {
+		t.Error("expected error for empty file")
+	}
+	if db != nil {
+		t.Error("expected nil db on error")
+	}
 }
 
 func TestMmapClose(t *testing.T) {
 	// Create a test database
 	f, err := os.CreateTemp("", "test-close")
-	requireNoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer os.Remove(f.Name())
 
 	writer, err := cdb.NewWriter(f)
-	requireNoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	err = writer.Put([]byte("test"), []byte("value"))
-	requireNoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	_, err = writer.Freeze()
-	requireNoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 	f.Close()
 
 	// Test that Close() can be called multiple times
 	db, err := cdb.OpenMmap(f.Name())
-	requireNoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	err = db.Close()
-	requireNoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	err = db.Close() // Should not panic
-	requireNoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestMmapIterator(t *testing.T) {
 	// Create a test database
 	f, err := os.CreateTemp("", "test-iterator")
-	requireNoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer os.Remove(f.Name())
 
 	writer, err := cdb.NewWriter(f)
-	requireNoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// Write test data in a predictable order
 	testData := []struct {
@@ -123,16 +171,22 @@ func TestMmapIterator(t *testing.T) {
 
 	for _, item := range testData {
 		err := writer.Put([]byte(item.key), []byte(item.value))
-		requireNoError(t, err)
+		if err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	_, err = writer.Freeze()
-	requireNoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 	f.Close()
 
 	// Test iterator
 	db, err := cdb.OpenMmap(f.Name())
-	requireNoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer db.Close()
 
 	// Collect all items from iterator using native iterator pattern
@@ -155,7 +209,9 @@ func TestMmapIterator(t *testing.T) {
 	}
 
 	// Verify we got all items (order might be different due to hashing)
-	assertEqual(t, len(testData), len(items))
+	if len(testData) != len(items) {
+		t.Errorf("expected %d items, got %d", len(testData), len(items))
+	}
 
 	// Create maps for easier comparison
 	expectedMap := make(map[string]string)
@@ -171,27 +227,39 @@ func TestMmapIterator(t *testing.T) {
 	// Verify all expected items are present
 	for key, expectedValue := range expectedMap {
 		actualValue, exists := actualMap[key]
-		assertTrue(t, exists, "Key not found in iterator results: %s", key)
-		assertEqual(t, expectedValue, actualValue, "Value mismatch for key: %s", key)
+		if !exists {
+			t.Errorf("Key not found in iterator results: %s", key)
+		}
+		if expectedValue != actualValue {
+			t.Errorf("Value mismatch for key: %s: expected %q, got %q", key, expectedValue, actualValue)
+		}
 	}
 }
 
 func TestMmapIteratorEmpty(t *testing.T) {
 	// Create an empty database
 	f, err := os.CreateTemp("", "test-empty-iterator")
-	requireNoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer os.Remove(f.Name())
 
 	writer, err := cdb.NewWriter(f)
-	requireNoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	_, err = writer.Freeze()
-	requireNoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 	f.Close()
 
 	// Test iterator on empty database
 	db, err := cdb.OpenMmap(f.Name())
-	requireNoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer db.Close()
 
 	// Count items using native iterator
@@ -200,17 +268,23 @@ func TestMmapIteratorEmpty(t *testing.T) {
 		count++
 	}
 
-	assertEqual(t, 0, count, "Empty database should not have any items")
+	if 0 != count {
+		t.Errorf("Empty database should not have any items: got %d", count)
+	}
 }
 
 func TestMmapIteratorKeys(t *testing.T) {
 	// Create a test database
 	f, err := os.CreateTemp("", "test-keys-iterator")
-	requireNoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer os.Remove(f.Name())
 
 	writer, err := cdb.NewWriter(f)
-	requireNoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// Write test data
 	testData := map[string]string{
@@ -221,16 +295,22 @@ func TestMmapIteratorKeys(t *testing.T) {
 
 	for key, value := range testData {
 		err := writer.Put([]byte(key), []byte(value))
-		requireNoError(t, err)
+		if err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	_, err = writer.Freeze()
-	requireNoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 	f.Close()
 
 	// Test Keys() iterator
 	db, err := cdb.OpenMmap(f.Name())
-	requireNoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer db.Close()
 
 	// Collect all keys
@@ -243,7 +323,9 @@ func TestMmapIteratorKeys(t *testing.T) {
 	}
 
 	// Verify we got all keys
-	assertEqual(t, len(testData), len(keys))
+	if len(testData) != len(keys) {
+		t.Errorf("expected %d keys, got %d", len(testData), len(keys))
+	}
 
 	// Convert to set for comparison
 	keySet := make(map[string]bool)
@@ -253,18 +335,24 @@ func TestMmapIteratorKeys(t *testing.T) {
 
 	// Verify all expected keys are present
 	for expectedKey := range testData {
-		assertTrue(t, keySet[expectedKey], "Key not found in Keys() results: %s", expectedKey)
+		if !keySet[expectedKey] {
+			t.Errorf("Key not found in Keys() results: %s", expectedKey)
+		}
 	}
 }
 
 func TestMmapIteratorValues(t *testing.T) {
 	// Create a test database
 	f, err := os.CreateTemp("", "test-values-iterator")
-	requireNoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer os.Remove(f.Name())
 
 	writer, err := cdb.NewWriter(f)
-	requireNoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// Write test data with unique values
 	testData := map[string]string{
@@ -275,16 +363,22 @@ func TestMmapIteratorValues(t *testing.T) {
 
 	for key, value := range testData {
 		err := writer.Put([]byte(key), []byte(value))
-		requireNoError(t, err)
+		if err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	_, err = writer.Freeze()
-	requireNoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 	f.Close()
 
 	// Test Values() iterator
 	db, err := cdb.OpenMmap(f.Name())
-	requireNoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer db.Close()
 
 	// Collect all values
@@ -297,7 +391,9 @@ func TestMmapIteratorValues(t *testing.T) {
 	}
 
 	// Verify we got all values
-	assertEqual(t, len(testData), len(values))
+	if len(testData) != len(values) {
+		t.Errorf("expected %d values, got %d", len(testData), len(values))
+	}
 
 	// Convert to set for comparison
 	valueSet := make(map[string]bool)
@@ -307,34 +403,46 @@ func TestMmapIteratorValues(t *testing.T) {
 
 	// Verify all expected values are present
 	for _, expectedValue := range testData {
-		assertTrue(t, valueSet[expectedValue], "Value not found in Values() results: %s", expectedValue)
+		if !valueSet[expectedValue] {
+			t.Errorf("Value not found in Values() results: %s", expectedValue)
+		}
 	}
 }
 
 func TestMmapIteratorEarlyTermination(t *testing.T) {
 	// Create a test database with many items
 	f, err := os.CreateTemp("", "test-early-termination")
-	requireNoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer os.Remove(f.Name())
 
 	writer, err := cdb.NewWriter(f)
-	requireNoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// Write 10 items
 	for i := 0; i < 10; i++ {
 		key := []byte("key" + string(rune('0'+i)))
 		value := []byte("value" + string(rune('0'+i)))
 		err := writer.Put(key, value)
-		requireNoError(t, err)
+		if err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	_, err = writer.Freeze()
-	requireNoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 	f.Close()
 
 	// Test early termination
 	db, err := cdb.OpenMmap(f.Name())
-	requireNoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer db.Close()
 
 	// Only iterate through first 3 items
@@ -343,13 +451,19 @@ func TestMmapIteratorEarlyTermination(t *testing.T) {
 		count++
 		if count >= 3 {
 			// Test that we can access key and value at termination point
-			assertTrue(t, len(key) > 0, "Key should not be empty")
-			assertTrue(t, len(value) > 0, "Value should not be empty")
+			if !(len(key) > 0) {
+				t.Error("Key should not be empty")
+			}
+			if !(len(value) > 0) {
+				t.Error("Value should not be empty")
+			}
 			break
 		}
 	}
 
-	assertEqual(t, 3, count, "Should have stopped after 3 items")
+	if 3 != count {
+		t.Errorf("Should have stopped after 3 items: got %d", count)
+	}
 }
 
 // createLargeCDBFile creates a CDB file with the specified number of entries for benchmarking

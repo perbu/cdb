@@ -1,6 +1,7 @@
 package cdb_test
 
 import (
+	"bytes"
 	"math/rand"
 	"os"
 	"reflect"
@@ -28,30 +29,44 @@ func testWritesReadable(t *testing.T, writer *cdb.Writer) {
 		key := []byte(strconv.Itoa(i))
 		value := []byte(randomString(r, 10))
 		err := writer.Put(key, value)
-		requireNoError(t, err)
+		if err != nil {
+			t.Fatal(err)
+		}
 
 		expected = append(expected, [][]byte{key, value})
 	}
 
 	db, err := writer.Freeze()
-	requireNoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	for _, record := range expected {
 		msg := "while fetching " + string(record[0])
 		val, err := db.Get(record[0])
-		requireNil(t, err)
-		assertEqual(t, string(record[1]), string(val), msg)
+		if err != nil {
+			t.Fatalf("%s: %v", msg, err)
+		}
+		if !bytes.Equal(val, record[1]) {
+			t.Errorf("%s: expected %q, got %q", msg, string(record[1]), string(val))
+		}
 	}
 }
 
 func TestWritesReadable(t *testing.T) {
 	f, err := os.CreateTemp("", "test-cdb")
-	requireNoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer os.Remove(f.Name())
 
 	writer, err := cdb.NewWriter(f)
-	requireNoError(t, err)
-	requireNotNil(t, writer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if writer == nil {
+		t.Fatal("writer is nil")
+	}
 
 	testWritesReadable(t, writer)
 }
@@ -77,28 +92,42 @@ func testWritesRandom(t *testing.T, writer *cdb.Writer) {
 
 	for _, record := range records {
 		err := writer.Put(record[0], record[1])
-		requireNoError(t, err)
+		if err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	db, err := writer.Freeze()
-	requireNoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	for _, record := range records {
 		msg := "while fetching " + string(record[0])
 		val, err := db.Get(record[0])
-		requireNil(t, err)
-		assertEqual(t, string(record[1]), string(val), msg)
+		if err != nil {
+			t.Fatalf("%s: %v", msg, err)
+		}
+		if !bytes.Equal(val, record[1]) {
+			t.Errorf("%s: expected %q, got %q", msg, string(record[1]), string(val))
+		}
 	}
 }
 
 func TestWritesRandom(t *testing.T) {
 	f, err := os.CreateTemp("", "test-cdb")
-	requireNoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer os.Remove(f.Name())
 
 	writer, err := cdb.NewWriter(f)
-	requireNoError(t, err)
-	requireNotNil(t, writer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if writer == nil {
+		t.Fatal("writer is nil")
+	}
 
 	testWritesRandom(t, writer)
 }
@@ -119,14 +148,18 @@ func benchmarkPut(b *testing.B, writer *cdb.Writer) {
 
 func BenchmarkPut(b *testing.B) {
 	f, err := os.CreateTemp("", "test-cdb")
-	requireNoError(b, err)
+	if err != nil {
+		b.Fatal(err)
+	}
 	defer func() {
 		f.Close()
 		os.Remove(f.Name())
 	}()
 
 	writer, err := cdb.NewWriter(f)
-	requireNoError(b, err)
+	if err != nil {
+		b.Fatal(err)
+	}
 
 	benchmarkPut(b, writer)
 }
