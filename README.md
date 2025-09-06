@@ -1,7 +1,8 @@
 # CDB - 64-bit Constant Database
 
-A native Go implementation of CDB (Constant Database) with 64-bit support and memory-mapped reading. Originates
-from [github.com/colinmarc/cdb](https://github.com/colinmarc/cdb).
+A native Go implementation of CDB,Constant Database, with 64-bit support and memory-mapped reading. Originates
+from [github.com/colinmarc/cdb](https://github.com/colinmarc/cdb). Although there is little left of the original code,
+the algorithm is the same.
 
 Originally, CDB was described as:
 > CDB is a fast, reliable, simple package for creating and reading constant databases. Its database structure provides
@@ -87,19 +88,39 @@ This implementation uses a 64-bit CDB format:
 - **Hash tables**: Linear probing collision resolution with 64-bit offsets
 
 ## Performance
+
+The performance goal was to get rid of the context switching and allocations that came with the original
+CDB implementation. A read through a memory map will have no slowdown if the content is in the page cache already,
+avoiding both the seek and read syscalls.
+
+The most important metric for me is the time to iterate over the database. At below 2 ns, it is hard to see how it can
+be faster. The benchmarks show a clear lead to Apple Silicon, likely because of lower memory latency.
+
 ```
+goos: darwin
+goarch: arm64
+pkg: github.com/perbu/cdb
 cpu: Apple M4
-BenchmarkGet-10         57468616                20.83 ns/op
-BenchmarkPut-10          1781390               668.0 ns/op
-Benchmarks on Apple M4:
+BenchmarkGet-10                         54848398                22.04 ns/op            0 B/op          0 allocs/op
+BenchmarkMmapIteratorAll-10             628005786                1.896 ns/op           0 B/op          0 allocs/op
+BenchmarkMmapIteratorKeys-10            708844383                1.678 ns/op           0 B/op          0 allocs/op
+BenchmarkMmapIteratorValues-10          708912603                1.677 ns/op           0 B/op          0 allocs/op
+BenchmarkPut-10                          1731052               715.6 ns/op           730 B/op          8 allocs/op
 ```
 
+Performance on a 64-bit Linux machine is similar:
+
 ```
+goos: linux
+goarch: amd64
+pkg: github.com/perbu/cdb
 cpu: AMD Ryzen 7 9800X3D 8-Core Processor
-BenchmarkGet-16         47684056                25.09 ns/op
-BenchmarkPut-16          1601368               736.5 ns/op
+BenchmarkGet-16                         45158083                26.57 ns/op            0 B/op          0 allocs/op
+BenchmarkMmapIteratorAll-16             445780636                2.675 ns/op           0 B/op          0 allocs/op
+BenchmarkMmapIteratorKeys-16            452996073                2.677 ns/op           0 B/op          0 allocs/op
+BenchmarkMmapIteratorValues-16          451605426                2.650 ns/op           0 B/op          0 allocs/op
+BenchmarkPut-16                          1572086               745.9 ns/op           734 B/op          8 allocs/op```
 ```
-
 ## API Reference
 
 ### Writing
