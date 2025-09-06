@@ -3,6 +3,7 @@ package cdb
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"iter"
 	"os"
 	"syscall"
@@ -35,20 +36,20 @@ func NewMmap(file *os.File) (*MmapCDB, error) {
 
 	stat, err := file.Stat()
 	if err != nil {
-		file.Close()
-		return nil, err
+		_ = file.Close() // not much we can do here.
+		return nil, fmt.Errorf("file.Stat: %w", err)
 	}
 
 	size := int(stat.Size())
 	if size < indexSize {
-		file.Close()
-		return nil, syscall.EINVAL
+		_ = file.Close()
+		return nil, fmt.Errorf("size < indexSize: %w", syscall.EINVAL)
 	}
 
 	data, err := unix.Mmap(int(file.Fd()), 0, size, unix.PROT_READ, unix.MAP_SHARED)
 	if err != nil {
-		file.Close()
-		return nil, err
+		_ = file.Close()
+		return nil, fmt.Errorf("unix.Mmap: %w", err)
 	}
 
 	cdb := &MmapCDB{

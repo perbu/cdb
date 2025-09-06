@@ -92,7 +92,9 @@ func TestMmapErrorHandling(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer os.Remove(f.Name())
-	f.Close()
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
 
 	db, err = cdb.OpenMmap(f.Name())
 	if err == nil {
@@ -125,21 +127,19 @@ func TestMmapClose(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	f.Close()
-
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
 	// Test that Close() can be called multiple times
 	db, err := cdb.OpenMmap(f.Name())
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	err = db.Close()
-	if err != nil {
+	if err := db.Close(); err != nil {
 		t.Fatal(err)
 	}
 
-	err = db.Close() // Should not panic
-	if err != nil {
+	if err := db.Close(); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -175,7 +175,6 @@ func TestMmapIterator(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-
 	_, err = writer.Freeze()
 	if err != nil {
 		t.Fatal(err)

@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"sync"
@@ -44,7 +45,7 @@ type Writer struct {
 func Create(path string) (*Writer, error) {
 	f, err := os.Create(path)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("os.Create(%q): %w", path, err)
 	}
 
 	return NewWriter(f)
@@ -55,12 +56,12 @@ func NewWriter(writer io.WriteSeeker) (*Writer, error) {
 	// Leave 256 * 16 bytes for the index at the head of the file.
 	_, err := writer.Seek(0, os.SEEK_SET)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("writer.Seek(0): %w", err)
 	}
 
 	_, err = writer.Write(make([]byte, indexSize))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("writer.Write(index): %w", err)
 	}
 
 	return &Writer{
@@ -107,17 +108,17 @@ func (cdb *Writer) Put(key, value []byte) error {
 	// Write the key length, then value length, then key, then value.
 	err := writeTuple64(cdb.bufferedWriter, uint64(len(key)), uint64(len(value)))
 	if err != nil {
-		return err
+		return fmt.Errorf("writeTuple64(key/value lengths): %w", err)
 	}
 
 	_, err = cdb.bufferedWriter.Write(key)
 	if err != nil {
-		return err
+		return fmt.Errorf("Write(key): %w", err)
 	}
 
 	_, err = cdb.bufferedWriter.Write(value)
 	if err != nil {
-		return err
+		return fmt.Errorf("Write(value): %w", err)
 	}
 
 	cdb.bufferedOffset += entrySize
@@ -138,12 +139,12 @@ func (cdb *Writer) Put(key, value []byte) error {
 func (cdb *Writer) Close() error {
 	err := cdb.bufferedWriter.Flush()
 	if err != nil {
-		return err
+		return fmt.Errorf("bufferedWriter.Flush: %w", err)
 	}
 
 	_, err = cdb.finalize()
 	if err != nil {
-		return err
+		return fmt.Errorf("finalize: %w", err)
 	}
 
 	if closer, ok := cdb.writer.(io.Closer); ok {
@@ -159,12 +160,12 @@ func (cdb *Writer) Close() error {
 func (cdb *Writer) Freeze() (*MmapCDB, error) {
 	err := cdb.bufferedWriter.Flush()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("bufferedWriter.Flush: %w", err)
 	}
 
 	_, err = cdb.finalize()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("finalize: %w", err)
 	}
 
 	// Convert io.WriteSeeker to *os.File if possible
@@ -225,7 +226,7 @@ func (cdb *Writer) doFinalize() error {
 		for _, entry := range hashTable {
 			err := writeTuple64(cdb.bufferedWriter, uint64(entry.hash), entry.offset)
 			if err != nil {
-				return err
+				return fmt.Errorf("writeTuple64(hash table entry): %w", err)
 			}
 			cdb.bufferedOffset += 16
 		}
@@ -234,7 +235,7 @@ func (cdb *Writer) doFinalize() error {
 	// Flush the buffered writer before seeking
 	err := cdb.bufferedWriter.Flush()
 	if err != nil {
-		return err
+		return fmt.Errorf("bufferedWriter.Flush: %w", err)
 	}
 
 	// Write index using actual table offsets
@@ -250,11 +251,14 @@ func (cdb *Writer) doFinalize() error {
 	// Seek to beginning and write index
 	_, err = cdb.writer.Seek(0, os.SEEK_SET)
 	if err != nil {
-		return err
+		return fmt.Errorf("writer.Seek(0): %w", err)
 	}
 
 	_, err = cdb.writer.Write(buf)
-	return err
+	if err != nil {
+		return fmt.Errorf("writer.Write(index): %w", err)
+	}
+	return nil
 }
 
 func writeTuple64(w io.Writer, first, second uint64) error {
@@ -263,5 +267,8 @@ func writeTuple64(w io.Writer, first, second uint64) error {
 	binary.LittleEndian.PutUint64(tuple[8:], second)
 
 	_, err := w.Write(tuple)
-	return err
+	if err != nil {
+		return fmt.Errorf("Write(tuple): %w", err)
+	}
+	return nil
 }
