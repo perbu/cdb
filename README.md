@@ -33,6 +33,7 @@ package main
 
 import (
 	"log"
+
 	"github.com/perbu/cdb"
 )
 
@@ -126,29 +127,58 @@ BenchmarkPut-16                          1572086               745.9 ns/op      
 ### Writing
 
 ```go
-writer, err := cdb.Create(path) // Create new database file
-writer, err := cdb.NewWriter(io.WriteSeeker) // Use custom WriteSeeker
-err := writer.Put(key, value []byte) // Add key-value pair
-db, err := writer.Freeze() // Finalize and return reader
-err := writer.Close() // Finalize and close file
+package main
+
+import (
+	"io"
+
+	"github.com/perbu/cdb"
+)
+
+func main() {
+	writer, err := cdb.Create(path)                   // Create new database file
+	writer, err := cdb.NewWriter(io.WriteSeeker)      // Use custom WriteSeeker
+	err := writer.Put(key, value []byte)              // Add key-value pair
+	db, err := writer.Freeze()                        // Finalize and return reader
+	err := writer.Close()                             // Finalize and close file
+}
 ```
 
 ### Reading
 
 ```go
-db, err := cdb.OpenMmap(path) // Open with memory mapping
-db, err := cdb.NewMmap(*os.File) // Create from open file  
-value, err := db.Get(key []byte) // Lookup value
-size := db.Size() // Get file size
-err := db.Close() // Close and unmap
+package main
+
+import (
+	"os"
+
+	"github.com/perbu/cdb"
+)
+
+func main() {
+	db, err := cdb.Open(path)            // Open with memory mapping
+	db, err := cdb.Mmap(*os.File)        // Create from open file  
+	value, err := db.Get(key []byte)     // Lookup value
+	size := db.Size()                    // Get file size
+	err := db.Close()                    // Close and unmap
+}
 ```
 
 ### Iteration (Go 1.23+)
 
 ```go
-for key, value := range db.All() { }      // Iterate key-value pairs
-for key := range db.Keys() { }            // Iterate keys only
-for value := range db.Values() { } // Iterate values only
+package main
+
+import (
+	"github.com/perbu/cdb"
+)
+
+func main() {
+	var db *cdb.DB
+	for key, value := range db.All() { }      // Iterate key-value pairs
+	for key := range db.Keys() { }            // Iterate keys only
+	for value := range db.Values() { }        // Iterate values only
+}
 ```
 
 ---
