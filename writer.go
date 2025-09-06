@@ -148,12 +148,13 @@ func (cdb *Writer) Close() error {
 	}
 
 	if closer, ok := cdb.writer.(io.Closer); ok {
-		if closeErr := closer.Close(); err == nil {
-			err = closeErr
+		if err := closer.Close(); err != nil {
+			return fmt.Errorf("writer.Close: %w", err)
 		}
+	} else {
+		return errors.New("brain damage: writer does not implement io.Closer")
 	}
-
-	return err
+	return nil
 }
 
 // Freeze finalizes the database and returns an MmapCDB instance for reading.
@@ -170,11 +171,9 @@ func (cdb *Writer) Freeze() (*MmapCDB, error) {
 
 	// Convert io.WriteSeeker to *os.File if possible
 	if file, ok := cdb.writer.(*os.File); ok {
-		return NewMmap(file)
+		return Mmap(file)
 	}
-
-	// If it's not a file, we can't create a memory-mapped version
-	return nil, errors.New("cannot create memory-mapped CDB from non-file WriteSeeker")
+	return nil, errors.New("brain damage: cannot create memory-mapped CDB from non-file WriteSeeker")
 }
 
 func (cdb *Writer) finalize() (index, error) {

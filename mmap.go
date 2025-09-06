@@ -3,6 +3,7 @@ package cdb
 import (
 	"bytes"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"iter"
 	"os"
@@ -21,25 +22,23 @@ type MmapCDB struct {
 	file  *os.File
 }
 
-// OpenMmap opens a 64-bit CDB file at the given path using memory mapping for reads.
-func OpenMmap(path string) (*MmapCDB, error) {
+// Open opens a 64-bit CDB file at the given path using memory mapping for reads.
+func Open(path string) (*MmapCDB, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
 	}
 
-	return NewMmap(f)
+	return Mmap(f)
 }
 
-// NewMmap creates a memory-mapped 64-bit CDB from an open file.
-func NewMmap(file *os.File) (*MmapCDB, error) {
-
+// Mmap creates a memory-mapped 64-bit CDB from an open file.
+func Mmap(file *os.File) (*MmapCDB, error) {
 	stat, err := file.Stat()
 	if err != nil {
 		_ = file.Close() // not much we can do here.
 		return nil, fmt.Errorf("file.Stat: %w", err)
 	}
-
 	size := int(stat.Size())
 	if size < indexSize {
 		_ = file.Close()
@@ -59,8 +58,8 @@ func NewMmap(file *os.File) (*MmapCDB, error) {
 
 	err = cdb.readIndex()
 	if err != nil {
-		cdb.Close()
-		return nil, err
+		_ = cdb.Close()
+		return nil, fmt.Errorf("readIndex: %w", err)
 	}
 
 	return cdb, nil
@@ -104,18 +103,25 @@ func (cdb *MmapCDB) Get(key []byte) ([]byte, error) {
 
 // Close unmaps the file and closes the file descriptor.
 func (cdb *MmapCDB) Close() error {
-	var err error
+	var errs []error
 	if cdb.data != nil {
-		err = unix.Munmap(cdb.data)
+		if err := unix.Munmap(cdb.data); err != nil {
+			if !errors.Is(err, syscall.EINVAL) {
+				errs = append(errs, fmt.Errorf("munmap: %w", err))
+			}
+		}
 		cdb.data = nil
 	}
 	if cdb.file != nil {
-		if closeErr := cdb.file.Close(); err == nil {
-			err = closeErr
+		if err := cdb.file.Close(); err == nil {
+			errs = append(errs, err)
 		}
 		cdb.file = nil
 	}
-	return err
+	if len(errs) > 0 {
+		return errors.Join(errs...)
+	}
+	return nil
 }
 
 // readIndex reads the index from the memory-mapped data.
@@ -237,7 +243,7 @@ func (cdb *MmapCDB) All() iter.Seq2[[]byte, []byte] {
 // Keys returns an iterator over all keys in the database.
 func (cdb *MmapCDB) Keys() iter.Seq[[]byte] {
 	return func(yield func([]byte) bool) {
-		for key, _ := range cdb.All() {
+		for key := range cdb.All() {
 			if !yield(key) {
 				return
 			}

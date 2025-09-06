@@ -44,7 +44,7 @@ func TestMmapCDB(t *testing.T) {
 	f.Close()
 
 	// Test memory-mapped reading
-	db, err := cdb.OpenMmap(f.Name())
+	db, err := cdb.Open(f.Name())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -78,7 +78,7 @@ func TestMmapCDB(t *testing.T) {
 
 func TestMmapErrorHandling(t *testing.T) {
 	// Test opening non-existent file
-	db, err := cdb.OpenMmap("nonexistent.cdb")
+	db, err := cdb.Open("nonexistent.cdb")
 	if err == nil {
 		t.Error("expected error for nonexistent file")
 	}
@@ -96,7 +96,7 @@ func TestMmapErrorHandling(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	db, err = cdb.OpenMmap(f.Name())
+	db, err = cdb.Open(f.Name())
 	if err == nil {
 		t.Error("expected error for empty file")
 	}
@@ -131,7 +131,7 @@ func TestMmapClose(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Test that Close() can be called multiple times
-	db, err := cdb.OpenMmap(f.Name())
+	db, err := cdb.Open(f.Name())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -182,7 +182,7 @@ func TestMmapIterator(t *testing.T) {
 	f.Close()
 
 	// Test iterator
-	db, err := cdb.OpenMmap(f.Name())
+	db, err := cdb.Open(f.Name())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -255,7 +255,7 @@ func TestMmapIteratorEmpty(t *testing.T) {
 	f.Close()
 
 	// Test iterator on empty database
-	db, err := cdb.OpenMmap(f.Name())
+	db, err := cdb.Open(f.Name())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -306,7 +306,7 @@ func TestMmapIteratorKeys(t *testing.T) {
 	f.Close()
 
 	// Test Keys() iterator
-	db, err := cdb.OpenMmap(f.Name())
+	db, err := cdb.Open(f.Name())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -374,7 +374,7 @@ func TestMmapIteratorValues(t *testing.T) {
 	f.Close()
 
 	// Test Values() iterator
-	db, err := cdb.OpenMmap(f.Name())
+	db, err := cdb.Open(f.Name())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -438,7 +438,7 @@ func TestMmapIteratorEarlyTermination(t *testing.T) {
 	f.Close()
 
 	// Test early termination
-	db, err := cdb.OpenMmap(f.Name())
+	db, err := cdb.Open(f.Name())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -504,7 +504,7 @@ func BenchmarkMmapIteratorAll(b *testing.B) {
 	defer os.Remove(filename)
 
 	// Open the database
-	db, err := cdb.OpenMmap(filename)
+	db, err := cdb.Open(filename)
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -539,7 +539,7 @@ func BenchmarkMmapIteratorKeys(b *testing.B) {
 	defer os.Remove(filename)
 
 	// Open the database
-	db, err := cdb.OpenMmap(filename)
+	db, err := cdb.Open(filename)
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -573,7 +573,7 @@ func BenchmarkMmapIteratorValues(b *testing.B) {
 	defer os.Remove(filename)
 
 	// Open the database
-	db, err := cdb.OpenMmap(filename)
+	db, err := cdb.Open(filename)
 	if err != nil {
 		b.Fatal(err)
 	}

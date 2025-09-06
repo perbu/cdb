@@ -35,7 +35,7 @@ var expectedRecords = [][][]byte{
 const testFile = "./test/test.cdb64"
 
 func TestGet(t *testing.T) {
-	db, err := cdb.OpenMmap(testFile)
+	db, err := cdb.Open(testFile)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -78,7 +78,7 @@ func TestClosesFile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	db, err := cdb.NewMmap(f)
+	db, err := cdb.Mmap(f)
 	if err != nil {
 		t.Fatal(err)
 	}
