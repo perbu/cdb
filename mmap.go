@@ -26,7 +26,7 @@ type MmapCDB struct {
 func Open(path string) (*MmapCDB, error) {
 	f, err := os.Open(path)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("os.Open(%q): %w", path, err)
 	}
 
 	return Mmap(f)

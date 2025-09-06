@@ -469,7 +469,7 @@ func TestMmapIteratorEarlyTermination(t *testing.T) {
 func createLargeCDBFile(filename string, numEntries int) error {
 	f, err := os.Create(filename)
 	if err != nil {
-		return err
+		return fmt.Errorf("os.Create(%q): %v", filename, err)
 	}
 	defer f.Close()
 
@@ -488,8 +488,10 @@ func createLargeCDBFile(filename string, numEntries int) error {
 		}
 	}
 
-	_, err = writer.Freeze()
-	return err
+	if _, err := writer.Freeze(); err != nil {
+		return fmt.Errorf("writer.Freeze(): %w", err)
+	}
+	return nil
 }
 
 const benchmarkEntries = 100000

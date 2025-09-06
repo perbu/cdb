@@ -54,7 +54,7 @@ func Create(path string) (*Writer, error) {
 // NewWriter opens a 64-bit CDB database for the given io.WriteSeeker.
 func NewWriter(writer io.WriteSeeker) (*Writer, error) {
 	// Leave 256 * 16 bytes for the index at the head of the file.
-	_, err := writer.Seek(0, os.SEEK_SET)
+	_, err := writer.Seek(0, io.SeekStart)
 	if err != nil {
 		return nil, fmt.Errorf("writer.Seek(0): %w", err)
 	}
@@ -113,12 +113,12 @@ func (cdb *Writer) Put(key, value []byte) error {
 
 	_, err = cdb.bufferedWriter.Write(key)
 	if err != nil {
-		return fmt.Errorf("Write(key): %w", err)
+		return fmt.Errorf("cdb.bufferedWriter.Write(key): %w", err)
 	}
 
 	_, err = cdb.bufferedWriter.Write(value)
 	if err != nil {
-		return fmt.Errorf("Write(value): %w", err)
+		return fmt.Errorf("cdb.bufferedWriter.Write(value): %w", err)
 	}
 
 	cdb.bufferedOffset += entrySize
@@ -248,7 +248,7 @@ func (cdb *Writer) doFinalize() error {
 	}
 
 	// Seek to beginning and write index
-	_, err = cdb.writer.Seek(0, os.SEEK_SET)
+	_, err = cdb.writer.Seek(0, io.SeekStart)
 	if err != nil {
 		return fmt.Errorf("writer.Seek(0): %w", err)
 	}
@@ -267,7 +267,7 @@ func writeTuple64(w io.Writer, first, second uint64) error {
 
 	_, err := w.Write(tuple)
 	if err != nil {
-		return fmt.Errorf("Write(tuple): %w", err)
+		return fmt.Errorf("w.Write(tuple): %w", err)
 	}
 	return nil
 }
