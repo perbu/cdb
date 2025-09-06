@@ -130,17 +130,57 @@ BenchmarkPut-16                          1572086               745.9 ns/op      
 package main
 
 import (
-	"io"
+	"log"
+	"os"
 
 	"github.com/perbu/cdb"
 )
 
 func main() {
-	writer, err := cdb.Create(path)                   // Create new database file
-	writer, err := cdb.NewWriter(io.WriteSeeker)      // Use custom WriteSeeker
-	err := writer.Put(key, value []byte)              // Add key-value pair
-	db, err := writer.Freeze()                        // Finalize and return reader
-	err := writer.Close()                             // Finalize and close file
+	path := "/tmp/example.cdb"
+	
+	// Create new database file
+	writer, err := cdb.Create(path)
+	if err != nil {
+		log.Fatal(err)
+	}
+	
+	// Add key-value pair
+	key := []byte("example")
+	value := []byte("data")
+	err = writer.Put(key, value)
+	if err != nil {
+		log.Fatal(err)
+	}
+	
+	// Finalize and return reader
+	db, err := writer.Freeze()
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer db.Close()
+	
+	// Alternative: use custom WriteSeeker
+	file, err := os.Create("/tmp/custom.cdb")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer file.Close()
+	
+	writer2, err := cdb.NewWriter(file)
+	if err != nil {
+		log.Fatal(err)
+	}
+	
+	err = writer2.Put([]byte("test"), []byte("value"))
+	if err != nil {
+		log.Fatal(err)
+	}
+	
+	err = writer2.Close()
+	if err != nil {
+		log.Fatal(err)
+	}
 }
 ```
 
@@ -150,17 +190,47 @@ func main() {
 package main
 
 import (
+	"fmt"
+	"log"
 	"os"
 
 	"github.com/perbu/cdb"
 )
 
 func main() {
-	db, err := cdb.Open(path)            // Open with memory mapping
-	db, err := cdb.Mmap(*os.File)        // Create from open file  
-	value, err := db.Get(key []byte)     // Lookup value
-	size := db.Size()                    // Get file size
-	err := db.Close()                    // Close and unmap
+	path := "/tmp/example.cdb"
+	
+	// Open with memory mapping
+	db, err := cdb.Open(path)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer db.Close()
+	
+	// Lookup value
+	key := []byte("example")
+	value, err := db.Get(key)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Printf("Value: %s\n", value)
+	
+	// Get file size
+	size := db.Size()
+	fmt.Printf("Database size: %d bytes\n", size)
+	
+	// Alternative: Create from open file
+	file, err := os.Open(path)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer file.Close()
+	
+	db2, err := cdb.Mmap(file)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer db2.Close()
 }
 ```
 
@@ -170,14 +240,46 @@ func main() {
 package main
 
 import (
+	"fmt"
+	"log"
+
 	"github.com/perbu/cdb"
 )
 
 func main() {
-	var db *cdb.DB
-	for key, value := range db.All() { }      // Iterate key-value pairs
-	for key := range db.Keys() { }            // Iterate keys only
-	for value := range db.Values() { }        // Iterate values only
+	// Create a sample database first
+	writer, err := cdb.Create("/tmp/iter_example.cdb")
+	if err != nil {
+		log.Fatal(err)
+	}
+	
+	writer.Put([]byte("key1"), []byte("value1"))
+	writer.Put([]byte("key2"), []byte("value2"))
+	writer.Put([]byte("key3"), []byte("value3"))
+	
+	db, err := writer.Freeze()
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer db.Close()
+	
+	// Iterate key-value pairs
+	fmt.Println("Key-Value pairs:")
+	for key, value := range db.All() {
+		fmt.Printf("  %s: %s\n", key, value)
+	}
+	
+	// Iterate keys only
+	fmt.Println("Keys:")
+	for key := range db.Keys() {
+		fmt.Printf("  %s\n", key)
+	}
+	
+	// Iterate values only
+	fmt.Println("Values:")
+	for value := range db.Values() {
+		fmt.Printf("  %s\n", value)
+	}
 }
 ```
 

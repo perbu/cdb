@@ -1,0 +1,30 @@
+name: Validate README Code Examples
+
+on:
+  pull_request:
+    paths:
+      - 'README.md'
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - 'README.md'
+
+jobs:
+  validate-readme-code:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.23'
+
+    - name: Make script executable
+      run: chmod +x .github/scripts/extract-and-test-readme.sh
+
+    - name: Extract and validate README code examples
+      run: .github/scripts/extract-and-test-readme.sh
