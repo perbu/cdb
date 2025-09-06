@@ -8,20 +8,163 @@ import (
 	"github.com/perbu/cdb"
 )
 
-func TestMmapCDB(t *testing.T) {
-	// Create a test database
-	f, err := os.CreateTemp("", "test-mmap64")
+// Test helper functions
+
+// createTestDB creates a temporary CDB database with the given data
+func createTestDB(t *testing.T, prefix string, data map[string]string) (string, func()) {
+	f, err := os.CreateTemp("", prefix)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.Remove(f.Name())
+
+	cleanup := func() {
+		os.Remove(f.Name())
+	}
 
 	writer, err := cdb.NewWriter(f)
 	if err != nil {
+		cleanup()
 		t.Fatal(err)
 	}
 
-	// Write test data
+	for key, value := range data {
+		err := writer.Put([]byte(key), []byte(value))
+		if err != nil {
+			cleanup()
+			t.Fatal(err)
+		}
+	}
+
+	_, err = writer.Freeze()
+	if err != nil {
+		cleanup()
+		t.Fatal(err)
+	}
+
+	if err := f.Close(); err != nil {
+		cleanup()
+		t.Fatal(err)
+	}
+
+	return f.Name(), cleanup
+}
+
+// createTestDBWithSlices creates a temporary CDB database with slice data
+func createTestDBWithSlices(t *testing.T, prefix string, data []struct{ key, value string }) (string, func()) {
+	f, err := os.CreateTemp("", prefix)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cleanup := func() {
+		os.Remove(f.Name())
+	}
+
+	writer, err := cdb.NewWriter(f)
+	if err != nil {
+		cleanup()
+		t.Fatal(err)
+	}
+
+	for _, item := range data {
+		err := writer.Put([]byte(item.key), []byte(item.value))
+		if err != nil {
+			cleanup()
+			t.Fatal(err)
+		}
+	}
+
+	_, err = writer.Freeze()
+	if err != nil {
+		cleanup()
+		t.Fatal(err)
+	}
+
+	if err := f.Close(); err != nil {
+		cleanup()
+		t.Fatal(err)
+	}
+
+	return f.Name(), cleanup
+}
+
+// compareMapResults compares expected map with actual results
+func compareMapResults(t *testing.T, expected map[string]string, actual map[string]string) {
+	for key, expectedValue := range expected {
+		actualValue, exists := actual[key]
+		if !exists {
+			t.Errorf("Key not found in results: %s", key)
+		}
+		if expectedValue != actualValue {
+			t.Errorf("Value mismatch for key %s: expected %q, got %q", key, expectedValue, actualValue)
+		}
+	}
+}
+
+// collectAllItems collects all key-value pairs from iterator and makes safe copies
+func collectAllItems(db *cdb.MmapCDB) []struct{ key, value string } {
+	var items []struct{ key, value string }
+	for key, value := range db.All() {
+		// Make copies since the slices point into mmap'd memory
+		keyCopy := make([]byte, len(key))
+		copy(keyCopy, key)
+		valueCopy := make([]byte, len(value))
+		copy(valueCopy, value)
+
+		items = append(items, struct{ key, value string }{string(keyCopy), string(valueCopy)})
+	}
+	return items
+}
+
+// collectKeys collects all keys from iterator and makes safe copies
+func collectKeys(db *cdb.MmapCDB) []string {
+	var keys []string
+	for key := range db.Keys() {
+		// Make copy since slice points into mmap'd memory
+		keyCopy := make([]byte, len(key))
+		copy(keyCopy, key)
+		keys = append(keys, string(keyCopy))
+	}
+	return keys
+}
+
+// collectValues collects all values from iterator and makes safe copies
+func collectValues(db *cdb.MmapCDB) []string {
+	var values []string
+	for value := range db.Values() {
+		// Make copy since slice points into mmap'd memory
+		valueCopy := make([]byte, len(value))
+		copy(valueCopy, value)
+		values = append(values, string(valueCopy))
+	}
+	return values
+}
+
+// setupBenchmarkDB creates a large CDB file for benchmarking and returns cleanup function
+func setupBenchmarkDB(b *testing.B, filename string, numEntries int) (*cdb.MmapCDB, func()) {
+	err := createLargeCDBFile(filename, numEntries)
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	cleanup := func() {
+		os.Remove(filename)
+	}
+
+	// Open the database
+	db, err := cdb.Open(filename)
+	if err != nil {
+		cleanup()
+		b.Fatal(err)
+	}
+
+	return db, func() {
+		db.Close()
+		cleanup()
+	}
+}
+
+func TestMmapCDB(t *testing.T) {
 	testData := map[string]string{
 		"foo":       "bar",
 		"baz":       "quuuux",
@@ -30,21 +173,11 @@ func TestMmapCDB(t *testing.T) {
 		"collision": "test",
 	}
 
-	for key, value := range testData {
-		err := writer.Put([]byte(key), []byte(value))
-		if err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	_, err = writer.Freeze()
-	if err != nil {
-		t.Fatal(err)
-	}
-	f.Close()
+	filename, cleanup := createTestDB(t, "test-mmap64", testData)
+	defer cleanup()
 
 	// Test memory-mapped reading
-	db, err := cdb.Open(f.Name())
+	db, err := cdb.Open(filename)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -106,32 +239,15 @@ func TestMmapErrorHandling(t *testing.T) {
 }
 
 func TestMmapClose(t *testing.T) {
-	// Create a test database
-	f, err := os.CreateTemp("", "test-close")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.Remove(f.Name())
-
-	writer, err := cdb.NewWriter(f)
-	if err != nil {
-		t.Fatal(err)
+	testData := map[string]string{
+		"test": "value",
 	}
 
-	err = writer.Put([]byte("test"), []byte("value"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	filename, cleanup := createTestDB(t, "test-close", testData)
+	defer cleanup()
 
-	_, err = writer.Freeze()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := f.Close(); err != nil {
-		t.Fatal(err)
-	}
 	// Test that Close() can be called multiple times
-	db, err := cdb.Open(f.Name())
+	db, err := cdb.Open(filename)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -145,19 +261,6 @@ func TestMmapClose(t *testing.T) {
 }
 
 func TestMmapIterator(t *testing.T) {
-	// Create a test database
-	f, err := os.CreateTemp("", "test-iterator")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.Remove(f.Name())
-
-	writer, err := cdb.NewWriter(f)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Write test data in a predictable order
 	testData := []struct {
 		key   string
 		value string
@@ -169,43 +272,18 @@ func TestMmapIterator(t *testing.T) {
 		{"empty_value", ""},
 	}
 
-	for _, item := range testData {
-		err := writer.Put([]byte(item.key), []byte(item.value))
-		if err != nil {
-			t.Fatal(err)
-		}
-	}
-	_, err = writer.Freeze()
-	if err != nil {
-		t.Fatal(err)
-	}
-	f.Close()
+	filename, cleanup := createTestDBWithSlices(t, "test-iterator", testData)
+	defer cleanup()
 
 	// Test iterator
-	db, err := cdb.Open(f.Name())
+	db, err := cdb.Open(filename)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer db.Close()
 
-	// Collect all items from iterator using native iterator pattern
-	var items []struct {
-		key   string
-		value string
-	}
-
-	for key, value := range db.All() {
-		// Make copies since the slices point into mmap'd memory
-		keyCopy := make([]byte, len(key))
-		copy(keyCopy, key)
-		valueCopy := make([]byte, len(value))
-		copy(valueCopy, value)
-
-		items = append(items, struct {
-			key   string
-			value string
-		}{string(keyCopy), string(valueCopy)})
-	}
+	// Collect all items from iterator
+	items := collectAllItems(db)
 
 	// Verify we got all items (order might be different due to hashing)
 	if len(testData) != len(items) {
@@ -224,38 +302,16 @@ func TestMmapIterator(t *testing.T) {
 	}
 
 	// Verify all expected items are present
-	for key, expectedValue := range expectedMap {
-		actualValue, exists := actualMap[key]
-		if !exists {
-			t.Errorf("Key not found in iterator results: %s", key)
-		}
-		if expectedValue != actualValue {
-			t.Errorf("Value mismatch for key: %s: expected %q, got %q", key, expectedValue, actualValue)
-		}
-	}
+	compareMapResults(t, expectedMap, actualMap)
 }
 
 func TestMmapIteratorEmpty(t *testing.T) {
 	// Create an empty database
-	f, err := os.CreateTemp("", "test-empty-iterator")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.Remove(f.Name())
-
-	writer, err := cdb.NewWriter(f)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	_, err = writer.Freeze()
-	if err != nil {
-		t.Fatal(err)
-	}
-	f.Close()
+	filename, cleanup := createTestDB(t, "test-empty-iterator", map[string]string{})
+	defer cleanup()
 
 	// Test iterator on empty database
-	db, err := cdb.Open(f.Name())
+	db, err := cdb.Open(filename)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -273,53 +329,24 @@ func TestMmapIteratorEmpty(t *testing.T) {
 }
 
 func TestMmapIteratorKeys(t *testing.T) {
-	// Create a test database
-	f, err := os.CreateTemp("", "test-keys-iterator")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.Remove(f.Name())
-
-	writer, err := cdb.NewWriter(f)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Write test data
 	testData := map[string]string{
 		"alpha": "value1",
 		"beta":  "value2",
 		"gamma": "value3",
 	}
 
-	for key, value := range testData {
-		err := writer.Put([]byte(key), []byte(value))
-		if err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	_, err = writer.Freeze()
-	if err != nil {
-		t.Fatal(err)
-	}
-	f.Close()
+	filename, cleanup := createTestDB(t, "test-keys-iterator", testData)
+	defer cleanup()
 
 	// Test Keys() iterator
-	db, err := cdb.Open(f.Name())
+	db, err := cdb.Open(filename)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer db.Close()
 
 	// Collect all keys
-	var keys []string
-	for key := range db.Keys() {
-		// Make copy since slice points into mmap'd memory
-		keyCopy := make([]byte, len(key))
-		copy(keyCopy, key)
-		keys = append(keys, string(keyCopy))
-	}
+	keys := collectKeys(db)
 
 	// Verify we got all keys
 	if len(testData) != len(keys) {
@@ -341,18 +368,6 @@ func TestMmapIteratorKeys(t *testing.T) {
 }
 
 func TestMmapIteratorValues(t *testing.T) {
-	// Create a test database
-	f, err := os.CreateTemp("", "test-values-iterator")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.Remove(f.Name())
-
-	writer, err := cdb.NewWriter(f)
-	if err != nil {
-		t.Fatal(err)
-	}
-
 	// Write test data with unique values
 	testData := map[string]string{
 		"key1": "alpha",
@@ -360,34 +375,18 @@ func TestMmapIteratorValues(t *testing.T) {
 		"key3": "gamma",
 	}
 
-	for key, value := range testData {
-		err := writer.Put([]byte(key), []byte(value))
-		if err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	_, err = writer.Freeze()
-	if err != nil {
-		t.Fatal(err)
-	}
-	f.Close()
+	filename, cleanup := createTestDB(t, "test-values-iterator", testData)
+	defer cleanup()
 
 	// Test Values() iterator
-	db, err := cdb.Open(f.Name())
+	db, err := cdb.Open(filename)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer db.Close()
 
 	// Collect all values
-	var values []string
-	for value := range db.Values() {
-		// Make copy since slice points into mmap'd memory
-		valueCopy := make([]byte, len(value))
-		copy(valueCopy, value)
-		values = append(values, string(valueCopy))
-	}
+	values := collectValues(db)
 
 	// Verify we got all values
 	if len(testData) != len(values) {
@@ -409,36 +408,19 @@ func TestMmapIteratorValues(t *testing.T) {
 }
 
 func TestMmapIteratorEarlyTermination(t *testing.T) {
-	// Create a test database with many items
-	f, err := os.CreateTemp("", "test-early-termination")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.Remove(f.Name())
-
-	writer, err := cdb.NewWriter(f)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Write 10 items
+	// Create test data with 10 items
+	testData := make(map[string]string)
 	for i := 0; i < 10; i++ {
-		key := []byte("key" + string(rune('0'+i)))
-		value := []byte("value" + string(rune('0'+i)))
-		err := writer.Put(key, value)
-		if err != nil {
-			t.Fatal(err)
-		}
+		key := "key" + string(rune('0'+i))
+		value := "value" + string(rune('0'+i))
+		testData[key] = value
 	}
 
-	_, err = writer.Freeze()
-	if err != nil {
-		t.Fatal(err)
-	}
-	f.Close()
+	filename, cleanup := createTestDB(t, "test-early-termination", testData)
+	defer cleanup()
 
 	// Test early termination
-	db, err := cdb.Open(f.Name())
+	db, err := cdb.Open(filename)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -497,20 +479,8 @@ func createLargeCDBFile(filename string, numEntries int) error {
 const benchmarkEntries = 100000
 
 func BenchmarkMmapIteratorAll(b *testing.B) {
-	// Create test file
-	filename := "/tmp/benchmark_iterator_all.cdb"
-	err := createLargeCDBFile(filename, benchmarkEntries)
-	if err != nil {
-		b.Fatal(err)
-	}
-	defer os.Remove(filename)
-
-	// Open the database
-	db, err := cdb.Open(filename)
-	if err != nil {
-		b.Fatal(err)
-	}
-	defer db.Close()
+	db, cleanup := setupBenchmarkDB(b, "/tmp/benchmark_iterator_all.cdb", benchmarkEntries)
+	defer cleanup()
 
 	b.ResetTimer()
 	b.ReportAllocs()
@@ -532,20 +502,8 @@ func BenchmarkMmapIteratorAll(b *testing.B) {
 }
 
 func BenchmarkMmapIteratorKeys(b *testing.B) {
-	// Create test file
-	filename := "/tmp/benchmark_iterator_keys.cdb"
-	err := createLargeCDBFile(filename, benchmarkEntries)
-	if err != nil {
-		b.Fatal(err)
-	}
-	defer os.Remove(filename)
-
-	// Open the database
-	db, err := cdb.Open(filename)
-	if err != nil {
-		b.Fatal(err)
-	}
-	defer db.Close()
+	db, cleanup := setupBenchmarkDB(b, "/tmp/benchmark_iterator_keys.cdb", benchmarkEntries)
+	defer cleanup()
 
 	b.ResetTimer()
 	b.ReportAllocs()
@@ -566,20 +524,8 @@ func BenchmarkMmapIteratorKeys(b *testing.B) {
 }
 
 func BenchmarkMmapIteratorValues(b *testing.B) {
-	// Create test file
-	filename := "/tmp/benchmark_iterator_values.cdb"
-	err := createLargeCDBFile(filename, benchmarkEntries)
-	if err != nil {
-		b.Fatal(err)
-	}
-	defer os.Remove(filename)
-
-	// Open the database
-	db, err := cdb.Open(filename)
-	if err != nil {
-		b.Fatal(err)
-	}
-	defer db.Close()
+	db, cleanup := setupBenchmarkDB(b, "/tmp/benchmark_iterator_values.cdb", benchmarkEntries)
+	defer cleanup()
 
 	b.ResetTimer()
 	b.ReportAllocs()
