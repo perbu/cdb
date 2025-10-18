@@ -544,3 +544,329 @@ func BenchmarkMmapIteratorValues(b *testing.B) {
 		}
 	}
 }
+
+// Helper functions for InMemoryCDB tests
+
+// createInMemoryDB creates a CDB in a byte slice with the given data
+func createInMemoryDB(t *testing.T, data map[string]string) (*cdb.InMemoryCDB, error) {
+	// First create a temp file
+	f, err := os.CreateTemp("", "test-inmemory")
+	if err != nil {
+		return nil, err
+	}
+	defer os.Remove(f.Name())
+
+	writer, err := cdb.NewWriter(f)
+	if err != nil {
+		f.Close()
+		return nil, err
+	}
+
+	for key, value := range data {
+		if err := writer.Put([]byte(key), []byte(value)); err != nil {
+			f.Close()
+			return nil, err
+		}
+	}
+
+	if _, err := writer.Freeze(); err != nil {
+		f.Close()
+		return nil, err
+	}
+
+	// Read file into memory
+	if _, err := f.Seek(0, 0); err != nil {
+		f.Close()
+		return nil, err
+	}
+
+	fileData, err := os.ReadFile(f.Name())
+	if err != nil {
+		f.Close()
+		return nil, err
+	}
+
+	f.Close()
+
+	// Create InMemoryCDB
+	return cdb.NewInMemory(fileData)
+}
+
+// collectAllItemsInMemory collects all key-value pairs from InMemoryCDB iterator
+func collectAllItemsInMemory(db *cdb.InMemoryCDB) []struct{ key, value string } {
+	var items []struct{ key, value string }
+	for key, value := range db.All() {
+		// For InMemoryCDB, we still make copies for consistency with test pattern
+		items = append(items, struct{ key, value string }{string(key), string(value)})
+	}
+	return items
+}
+
+// collectKeysInMemory collects all keys from InMemoryCDB iterator
+func collectKeysInMemory(db *cdb.InMemoryCDB) []string {
+	var keys []string
+	for key := range db.Keys() {
+		keys = append(keys, string(key))
+	}
+	return keys
+}
+
+// collectValuesInMemory collects all values from InMemoryCDB iterator
+func collectValuesInMemory(db *cdb.InMemoryCDB) []string {
+	var values []string
+	for value := range db.Values() {
+		values = append(values, string(value))
+	}
+	return values
+}
+
+// Tests for InMemoryCDB
+
+func TestInMemoryCDB(t *testing.T) {
+	testData := map[string]string{
+		"foo":       "bar",
+		"baz":       "quuuux",
+		"empty":     "",
+		"":          "empty_key",
+		"collision": "test",
+	}
+
+	db, err := createInMemoryDB(t, testData)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	// Verify all data can be read correctly
+	for key, expectedValue := range testData {
+		value, err := db.Get([]byte(key))
+		if err != nil {
+			t.Fatalf("Failed to get key: %s: %v", key, err)
+		}
+		if expectedValue != string(value) {
+			t.Errorf("Key: %s: expected %q, got %q", key, expectedValue, string(value))
+		}
+	}
+
+	// Test non-existent key
+	value, err := db.Get([]byte("nonexistent"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if value != nil {
+		t.Errorf("expected nil value for nonexistent key, got: %v", value)
+	}
+
+	// Test size method
+	if !(db.Size() > 0) {
+		t.Error("expected db.Size() > 0")
+	}
+}
+
+func TestInMemoryErrorHandling(t *testing.T) {
+	// Test with data that's too small
+	tooSmall := make([]byte, 100) // Less than indexSize (4096)
+	db, err := cdb.NewInMemory(tooSmall)
+	if err == nil {
+		t.Error("expected error for data smaller than indexSize")
+	}
+	if db != nil {
+		t.Error("expected nil db on error")
+	}
+
+	// Test with empty slice
+	db, err = cdb.NewInMemory([]byte{})
+	if err == nil {
+		t.Error("expected error for empty data")
+	}
+	if db != nil {
+		t.Error("expected nil db on error")
+	}
+}
+
+func TestInMemoryClose(t *testing.T) {
+	testData := map[string]string{
+		"test": "value",
+	}
+
+	db, err := createInMemoryDB(t, testData)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Test that Close() can be called multiple times (should be no-op)
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	// Test that data is still accessible after Close() (unlike mmap version)
+	value, err := db.Get([]byte("test"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(value) != "value" {
+		t.Errorf("expected 'value', got %q", string(value))
+	}
+}
+
+func TestInMemoryIterator(t *testing.T) {
+	testData := map[string]string{
+		"key1":        "value1",
+		"key2":        "value2",
+		"key3":        "value3",
+		"":            "empty_key",
+		"empty_value": "",
+	}
+
+	db, err := createInMemoryDB(t, testData)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	// Collect all items from iterator
+	items := collectAllItemsInMemory(db)
+
+	// Verify we got all items
+	if len(testData) != len(items) {
+		t.Errorf("expected %d items, got %d", len(testData), len(items))
+	}
+
+	// Create maps for easier comparison
+	actualMap := make(map[string]string)
+	for _, item := range items {
+		actualMap[item.key] = item.value
+	}
+
+	// Verify all expected items are present
+	compareMapResults(t, testData, actualMap)
+}
+
+func TestInMemoryIteratorEmpty(t *testing.T) {
+	// Create an empty database
+	db, err := createInMemoryDB(t, map[string]string{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	// Count items using iterator
+	count := 0
+	for range db.All() {
+		count++
+	}
+
+	if 0 != count {
+		t.Errorf("Empty database should not have any items: got %d", count)
+	}
+}
+
+func TestInMemoryIteratorKeys(t *testing.T) {
+	testData := map[string]string{
+		"alpha": "value1",
+		"beta":  "value2",
+		"gamma": "value3",
+	}
+
+	db, err := createInMemoryDB(t, testData)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	// Collect all keys
+	keys := collectKeysInMemory(db)
+
+	// Verify we got all keys
+	if len(testData) != len(keys) {
+		t.Errorf("expected %d keys, got %d", len(testData), len(keys))
+	}
+
+	// Convert to set for comparison
+	keySet := make(map[string]bool)
+	for _, key := range keys {
+		keySet[key] = true
+	}
+
+	// Verify all expected keys are present
+	for expectedKey := range testData {
+		if !keySet[expectedKey] {
+			t.Errorf("Key not found in Keys() results: %s", expectedKey)
+		}
+	}
+}
+
+func TestInMemoryIteratorValues(t *testing.T) {
+	testData := map[string]string{
+		"key1": "alpha",
+		"key2": "beta",
+		"key3": "gamma",
+	}
+
+	db, err := createInMemoryDB(t, testData)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	// Collect all values
+	values := collectValuesInMemory(db)
+
+	// Verify we got all values
+	if len(testData) != len(values) {
+		t.Errorf("expected %d values, got %d", len(testData), len(values))
+	}
+
+	// Convert to set for comparison
+	valueSet := make(map[string]bool)
+	for _, value := range values {
+		valueSet[value] = true
+	}
+
+	// Verify all expected values are present
+	for _, expectedValue := range testData {
+		if !valueSet[expectedValue] {
+			t.Errorf("Value not found in Values() results: %s", expectedValue)
+		}
+	}
+}
+
+func TestInMemoryIteratorEarlyTermination(t *testing.T) {
+	// Create test data with 10 items
+	testData := make(map[string]string)
+	for i := 0; i < 10; i++ {
+		key := "key" + string(rune('0'+i))
+		value := "value" + string(rune('0'+i))
+		testData[key] = value
+	}
+
+	db, err := createInMemoryDB(t, testData)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	// Only iterate through first 3 items
+	count := 0
+	for key, value := range db.All() {
+		count++
+		if count >= 3 {
+			// Test that we can access key and value at termination point
+			if !(len(key) > 0) {
+				t.Error("Key should not be empty")
+			}
+			if !(len(value) > 0) {
+				t.Error("Value should not be empty")
+			}
+			break
+		}
+	}
+
+	if 3 != count {
+		t.Errorf("Should have stopped after 3 items: got %d", count)
+	}
+}
