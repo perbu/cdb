@@ -23,6 +23,7 @@ memory pressure will be different from what you might be used to.
 - **64-bit only**: Simplified implementation supporting only 64-bit databases. These are only marginally larger than the
   32-bit equivalent and have no size restrictions.
 - **Memory-mapped reads**: Zero-copy access using mmap for optimal read performance. Reduces allocations by 90%.
+- **In-memory support**: Read CDB data from byte slices without file I/O or mmap.
 - **Native Go iterators**: Support for Go 1.23+ `range` syntax over keys, values, and key-value pairs
 - **Buffered writes**: 64KB write buffer for efficient database creation
 
@@ -233,6 +234,49 @@ func main() {
 	defer db2.Close()
 }
 ```
+
+### In-Memory Reading
+
+```go
+package main
+
+import (
+	"fmt"
+	"log"
+	"os"
+
+	"github.com/perbu/cdb"
+)
+
+func main() {
+	// Read CDB file into memory
+	data, err := os.ReadFile("/tmp/example.cdb")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// Create in-memory CDB from byte slice
+	db, err := cdb.NewInMemory(data)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer db.Close()
+
+	// Use same API as memory-mapped version
+	value, err := db.Get([]byte("example"))
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Printf("Value: %s\n", value)
+
+	// Iterate over all entries
+	for key, value := range db.All() {
+		fmt.Printf("%s: %s\n", key, value)
+	}
+}
+```
+
+**Note**: The byte slice must remain valid for the lifetime of the `InMemoryCDB`. Data is still accessible after `Close()`.
 
 ### Iteration (Go 1.23+)
 
