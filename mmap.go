@@ -17,9 +17,8 @@ import (
 // memory-mapped file data and are valid only until the database is closed.
 // Do not modify the contents of the returned slices.
 type MmapCDB struct {
-	data  []byte
-	index index
-	file  *os.File
+	data []byte
+	file *os.File
 }
 
 // Open opens a 64-bit CDB file at the given path using memory mapping for reads.
@@ -56,12 +55,6 @@ func Mmap(file *os.File) (*MmapCDB, error) {
 		file: file,
 	}
 
-	err = cdb.readIndex()
-	if err != nil {
-		_ = cdb.Close()
-		return nil, fmt.Errorf("readIndex: %w", err)
-	}
-
 	return cdb, nil
 }
 
@@ -69,7 +62,7 @@ func Mmap(file *os.File) (*MmapCDB, error) {
 func (cdb *MmapCDB) Get(key []byte) ([]byte, error) {
 	hash := cdbHash(key)
 
-	table := cdb.index[hash&0xff]
+	table := cdb.readTableAt(uint8(hash & 0xff))
 	if table.length == 0 {
 		return nil, nil
 	}
@@ -124,21 +117,13 @@ func (cdb *MmapCDB) Close() error {
 	return nil
 }
 
-// readIndex reads the index from the memory-mapped data.
-func (cdb *MmapCDB) readIndex() error {
-	if len(cdb.data) < indexSize {
-		return syscall.EINVAL
+// readTableAt reads a table entry directly from the mmap'd index.
+func (cdb *MmapCDB) readTableAt(tableNum uint8) table {
+	off := int(tableNum) * 16
+	return table{
+		offset: binary.LittleEndian.Uint64(cdb.data[off : off+8]),
+		length: binary.LittleEndian.Uint64(cdb.data[off+8 : off+16]),
 	}
-
-	for i := 0; i < 256; i++ {
-		off := i * 16
-		cdb.index[i] = table{
-			offset: binary.LittleEndian.Uint64(cdb.data[off : off+8]),
-			length: binary.LittleEndian.Uint64(cdb.data[off+8 : off+16]),
-		}
-	}
-
-	return nil
 }
 
 // getValueAtMmap retrieves a value at the given offset using memory-mapped data.
@@ -194,8 +179,9 @@ func (cdb *MmapCDB) All() iter.Seq2[[]byte, []byte] {
 		endPos = uint64(len(cdb.data)) // Start with file size, then find minimum table offset
 
 		for i := 0; i < 256; i++ {
-			if cdb.index[i].length > 0 && cdb.index[i].offset < endPos {
-				endPos = cdb.index[i].offset
+			table := cdb.readTableAt(uint8(i))
+			if table.length > 0 && table.offset < endPos {
+				endPos = table.offset
 			}
 		}
 
