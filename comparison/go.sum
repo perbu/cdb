@@ -1,0 +1,7 @@
+github.com/Pallinder/go-randomdata v1.1.0/go.mod h1:yHmJgulpD2Nfrm0cR9tI/+oAgRqCQQixsA8HyRZfV9Y=
+github.com/colinmarc/cdb v0.0.0-20190223170904-60f317823f70 h1:1uCY1nJQwssamFp/L2rk8rRycjBn0l2nYIrP/pPBRgE=
+github.com/colinmarc/cdb v0.0.0-20190223170904-60f317823f70/go.mod h1:lZuNMoMtkGwujKDy0EndRQBl7owNIHwRq1ycvQeaWqg=
+github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
+github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
+github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
+github.com/stretchr/testify v1.3.0/go.mod h1:M5WIy9Dh21IEIfnGCwXGc5bZfKNJtfHm1UVUgZn+9EI=
