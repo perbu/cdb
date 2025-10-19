@@ -5,12 +5,13 @@ import (
 	"os"
 	"testing"
 
-	"github.com/colinmarc/cdb"
+	cmdb "github.com/colinmarc/cdb"
+	pcdb "github.com/perbu/cdb"
 )
 
 // createLargeCDBFileColinmarc creates a CDB file using colinmarc/cdb
 func createLargeCDBFileColinmarc(filename string, numEntries int) error {
-	writer, err := cdb.Create(filename)
+	writer, err := cmdb.Create(filename)
 	if err != nil {
 		return err
 	}
@@ -31,6 +32,24 @@ func createLargeCDBFileColinmarc(filename string, numEntries int) error {
 
 const benchmarkEntries = 100000
 
+// createLargeCDBFilePerbu creates a CDB file using this module (github.com/perbu/cdb)
+func createLargeCDBFilePerbu(filename string, numEntries int) error {
+	writer, err := pcdb.Create(filename)
+	if err != nil {
+		return err
+	}
+	defer writer.Close()
+
+	for i := 0; i < numEntries; i++ {
+		key := fmt.Sprintf("key_%08d", i)
+		value := fmt.Sprintf("value_%08d_data_payload", i)
+		if err := writer.Put([]byte(key), []byte(value)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func BenchmarkColinmarcIterator(b *testing.B) {
 	// Create test file
 	filename := "/tmp/benchmark_colinmarc.cdb"
@@ -41,7 +60,7 @@ func BenchmarkColinmarcIterator(b *testing.B) {
 	defer os.Remove(filename)
 
 	// Open the database
-	db, err := cdb.Open(filename)
+	db, err := cmdb.Open(filename)
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -82,7 +101,7 @@ func BenchmarkColinmarcGet(b *testing.B) {
 	defer os.Remove(filename)
 
 	// Open the database
-	db, err := cdb.Open(filename)
+	db, err := cmdb.Open(filename)
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -92,6 +111,60 @@ func BenchmarkColinmarcGet(b *testing.B) {
 	b.ReportAllocs()
 
 	// Test random key lookups
+	for i := 0; i < b.N; i++ {
+		key := fmt.Sprintf("key_%08d", i%benchmarkEntries)
+		_, err := db.Get([]byte(key))
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkPerbuIterator(b *testing.B) {
+	filename := "/tmp/benchmark_perbu.cdb"
+	if err := createLargeCDBFilePerbu(filename, benchmarkEntries); err != nil {
+		b.Fatal(err)
+	}
+	defer os.Remove(filename)
+
+	db, err := pcdb.Open(filename)
+	if err != nil {
+		b.Fatal(err)
+	}
+	defer db.Close()
+
+	b.ResetTimer()
+	b.ReportAllocs()
+
+	iterations := 0
+	for i := 0; i < b.N; i++ {
+		for k, v := range db.All() {
+			_ = k[0]
+			_ = v[0]
+			iterations++
+			if iterations >= b.N {
+				return
+			}
+		}
+	}
+}
+
+func BenchmarkPerbuGet(b *testing.B) {
+	filename := "/tmp/benchmark_perbu_get.cdb"
+	if err := createLargeCDBFilePerbu(filename, benchmarkEntries); err != nil {
+		b.Fatal(err)
+	}
+	defer os.Remove(filename)
+
+	db, err := pcdb.Open(filename)
+	if err != nil {
+		b.Fatal(err)
+	}
+	defer db.Close()
+
+	b.ResetTimer()
+	b.ReportAllocs()
+
 	for i := 0; i < b.N; i++ {
 		key := fmt.Sprintf("key_%08d", i%benchmarkEntries)
 		_, err := db.Get([]byte(key))
