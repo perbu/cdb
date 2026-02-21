@@ -95,6 +95,11 @@ The performance goal was to get rid of the context switching and allocations tha
 CDB implementation. A read through a memory map will have no slowdown if the content is in the page cache already,
 avoiding both the seek and read syscalls.
 
+**Caveat**: On a page miss, the OS will put the calling thread to sleep while the page is fetched from disk. In Go,
+this blocks the underlying OS thread, not just the goroutine, which means one of the GOMAXPROCS worker threads becomes
+unavailable. For applications with many active goroutines, frequent page misses can cause noticeable stutter as the
+runtime runs out of available threads to schedule work on.
+
 The most important metric for me is the time to iterate over the database. At below 2 ns, it is hard to see how it can
 be faster.
 
