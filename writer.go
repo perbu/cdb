@@ -12,14 +12,15 @@ import (
 
 var ErrTooMuchData = errors.New("CDB files are limited to 8EB of data")
 
-const indexSize = 256 * 16
+const (
+	numTables = 256
+	indexSize = numTables * 16
+)
 
 type table struct {
 	offset uint64
 	length uint64
 }
-
-type index [256]table
 
 type entry struct {
 	hash   uint32
@@ -74,36 +75,17 @@ func NewWriter(writer io.WriteSeeker) (*Writer, error) {
 // Put adds a key/value pair to the database. If the amount of data written
 // would exceed the limit, Put returns ErrTooMuchData.
 func (cdb *Writer) Put(key, value []byte) error {
-	/* The + 32 is a safety buffer to prevent edge cases where the calculation might be slightly off.
-	Let me break down the magic numbers:
-
-	The calculation components:
-	- cdb.bufferedOffset: Current position in the file (data written so far)
-	- entrySize: Size of this record (16 bytes header + key + value)
-	- cdb.estimatedFooterSize: Estimated size of hash tables that will be written at the end
-	- + 32: Safety buffer
-
-	The + 32 breakdown:
-	- Hash table entries are 16 bytes each (hash + offset)
-	- In the worst case, adding this entry might trigger hash table reallocation
-	- Hash table sizes double when they get full (power of 2 sizing)
-	- The 32 provides buffer for:
-	  - Potential rounding errors in estimatedFooterSize
-	  - Additional hash table entries from collision handling
-	  - General safety margin to ensure we don't hit the exact limit
-	*/
 	entrySize := int64(16 + len(key) + len(value))
 	const maxInt64 = int64(^uint64(0) >> 1)
+	// estimatedFooterSize is an upper bound on the hash-table footer we will
+	// emit in doFinalize; the small constant absorbs rounding in that estimate.
 	if (cdb.bufferedOffset + entrySize + cdb.estimatedFooterSize + 32) > maxInt64 {
 		return ErrTooMuchData
 	}
 
-	// Record the entry in the hash table, to be written out at the end.
 	hash := cdbHash(key)
-	table := hash & 0xff
-
-	entry := entry{hash: hash, offset: uint64(cdb.bufferedOffset)}
-	cdb.entries[table] = append(cdb.entries[table], entry)
+	bucket := hash & 0xff
+	cdb.entries[bucket] = append(cdb.entries[bucket], entry{hash: hash, offset: uint64(cdb.bufferedOffset)})
 
 	// Write the key length, then value length, then key, then value.
 	err := writeTuple64(cdb.bufferedWriter, uint64(len(key)), uint64(len(value)))
@@ -123,12 +105,10 @@ func (cdb *Writer) Put(key, value []byte) error {
 
 	cdb.bufferedOffset += entrySize
 
-	// We approximate the footer size: 16 bytes per entry and 16 per table.
-	// This approximation becomes more accurate over time.
-	totalEntries := len(cdb.entries[table])
+	// Rough upper bound on the footer growth contributed by this entry.
+	totalEntries := len(cdb.entries[bucket])
 	cdb.estimatedFooterSize += 16
 	if totalEntries&(totalEntries-1) == 0 {
-		// Reallocate hash tables
 		cdb.estimatedFooterSize += 16 * int64(totalEntries)
 	}
 
@@ -142,8 +122,7 @@ func (cdb *Writer) Close() error {
 		return fmt.Errorf("bufferedWriter.Flush: %w", err)
 	}
 
-	_, err = cdb.finalize()
-	if err != nil {
+	if err := cdb.finalize(); err != nil {
 		return fmt.Errorf("finalize: %w", err)
 	}
 
@@ -152,7 +131,7 @@ func (cdb *Writer) Close() error {
 			return fmt.Errorf("writer.Close: %w", err)
 		}
 	} else {
-		return errors.New("brain damage: writer does not implement io.Closer")
+		return errors.New("writer does not implement io.Closer")
 	}
 	return nil
 }
@@ -164,34 +143,29 @@ func (cdb *Writer) Freeze() (*MmapCDB, error) {
 		return nil, fmt.Errorf("bufferedWriter.Flush: %w", err)
 	}
 
-	_, err = cdb.finalize()
-	if err != nil {
+	if err := cdb.finalize(); err != nil {
 		return nil, fmt.Errorf("finalize: %w", err)
 	}
 
-	// Convert io.WriteSeeker to *os.File if possible
 	if file, ok := cdb.writer.(*os.File); ok {
 		return Mmap(file)
 	}
-	return nil, errors.New("brain damage: cannot create memory-mapped CDB from non-file WriteSeeker")
+	return nil, errors.New("cannot create memory-mapped CDB from non-file WriteSeeker")
 }
 
-func (cdb *Writer) finalize() (index, error) {
+func (cdb *Writer) finalize() error {
 	var err error
 	cdb.finalizeOnce.Do(func() {
 		err = cdb.doFinalize()
 	})
-
-	// Return empty index since doFinalize already writes the index to file
-	return index{}, err
+	return err
 }
 
 func (cdb *Writer) doFinalize() error {
 	// Store table offsets as we write hash tables
-	var tableOffsets [256]uint64
+	var tableOffsets [numTables]uint64
 
-	// Create hash tables and write them to the file
-	for i := 0; i < 256; i++ {
+	for i := range numTables {
 		tableEntries := cdb.entries[i]
 		tableSize := uint64(len(tableEntries) << 1)
 
@@ -210,7 +184,7 @@ func (cdb *Writer) doFinalize() error {
 			slot := startingSlot
 
 			for {
-				if hashTable[slot].hash == 0 {
+				if hashTable[slot].offset == 0 {
 					hashTable[slot] = entry
 					break
 				}
@@ -239,7 +213,7 @@ func (cdb *Writer) doFinalize() error {
 
 	// Write index using actual table offsets
 	buf := make([]byte, indexSize)
-	for i := 0; i < 256; i++ {
+	for i := range numTables {
 		tableEntries := cdb.entries[i]
 		tableSize := uint64(len(tableEntries) << 1)
 
@@ -261,12 +235,11 @@ func (cdb *Writer) doFinalize() error {
 }
 
 func writeTuple64(w io.Writer, first, second uint64) error {
-	tuple := make([]byte, 16)
+	var tuple [16]byte
 	binary.LittleEndian.PutUint64(tuple[:8], first)
 	binary.LittleEndian.PutUint64(tuple[8:], second)
 
-	_, err := w.Write(tuple)
-	if err != nil {
+	if _, err := w.Write(tuple[:]); err != nil {
 		return fmt.Errorf("w.Write(tuple): %w", err)
 	}
 	return nil
