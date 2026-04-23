@@ -48,6 +48,10 @@ func Mmap(file *os.File) (*MmapCDB, error) {
 		return nil, fmt.Errorf("unix.Mmap: %w", err)
 	}
 
+	// Point lookups are the dominant workload; disable readahead to reduce
+	// page-cache pressure. Failure is non-fatal — the mapping is still usable.
+	_ = unix.Madvise(data, unix.MADV_RANDOM)
+
 	cdb := &MmapCDB{
 		data: data,
 		file: file,
