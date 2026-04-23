@@ -100,6 +100,11 @@ this blocks the underlying OS thread, not just the goroutine, which means one of
 unavailable. For applications with many active goroutines, frequent page misses can cause noticeable stutter as the
 runtime runs out of available threads to schedule work on.
 
+**Access hint**: On open, `Mmap` advises the kernel with `MADV_RANDOM`, which disables readahead. Point lookups touch a
+hash-table slot and a data record in unrelated parts of the file, so readahead typically just evicts useful pages to
+populate ones that will not be read. Workloads dominated by full-database iteration over a cold file will see less
+benefit from this hint and can pay a small cost for it.
+
 The most important metric for me is the time to iterate over the database. At below 2 ns, it is hard to see how it can
 be faster.
 
