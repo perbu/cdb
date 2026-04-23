@@ -58,7 +58,7 @@ func getValueAt(data []byte, offset uint64, expectedKey []byte) []byte {
 // dataEndPos finds the end of the data section by finding the minimum table offset.
 func dataEndPos(data []byte) uint64 {
 	endPos := uint64(len(data))
-	for i := 0; i < 256; i++ {
+	for i := range numTables {
 		table := readTableAt(data, uint8(i))
 		if table.length > 0 && table.offset < endPos {
 			endPos = table.offset
@@ -88,8 +88,9 @@ func getFromBytes(data []byte, key []byte) ([]byte, error) {
 		slotOffset := table.offset + (16 * slot)
 		slotHash, offset := readTuple(data, slotOffset)
 
-		// An empty slot means the key doesn't exist.
-		if slotHash == 0 {
+		// Empty slots have offset 0. Real data offsets are always >= indexSize,
+		// so offset 0 is an unambiguous marker even when a real entry hashes to 0.
+		if offset == 0 {
 			break
 		} else if slotHash == uint64(hash) {
 			value := getValueAt(data, offset, key)
